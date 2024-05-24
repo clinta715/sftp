@@ -1,0 +1,10 @@
+{
+  "host_data": [
+    {
+      "hostname": "172.16.1.16",
+      "username": "dairy",
+      "password": "DLLbackup608"
+    }
+  ],
+  "protocol": "SFTP"
+}

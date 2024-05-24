@@ -1,0 +1,18 @@
+disconnect button removed (replaced with tab close button)
+current path for each filebrowser and remotefilebrowser part of sftp_current_credentials
+sftp_current_credentials part of mainwindow
+onEntryDoubleClicked needs host/user/pass/port now (emit/message/signal)
+connect now requires a session_id
+hostname_changed now requires a session_id
+sftp_getcwd now requires a session_id
+sftp_listdir_attr now requires a session_id
+downloadworker will keep sftp connector sessions open for sftp_current_credentials session_ids that are still active
+they can be closed by putting a 'close' command on the sftp_queue with the session_id
+FileBrowser and RemoteFileBrowser now have session_id argument
+sftp_mkdir now requires a session_id
+sftp_rmdir now requires a session_id
+sftp_remove now requires a session_id
+is_remote_directory now requires a session_id
+change_directory now requires a session_id
+    needs to handle sftp_current_credentials[session_id].current_local_directory
+double_click_handler now requires a session_id
