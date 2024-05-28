@@ -9,8 +9,8 @@ import queue
 import stat
 from datetime import datetime
 import enum
-from qtconsole.rich_jupyter_widget import RichJupyterWidget
-from qtconsole.inprocess import QtInProcessKernelManager
+# from qtconsole.rich_jupyter_widget import RichJupyterWidget
+# from qtconsole.inprocess import QtInProcessKernelManager
 from PyQt5.QtWidgets import QPlainTextEdit,QTableView, QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QFileDialog, QListWidget, QTextEdit, QMessageBox, QInputDialog, QMenu, QCompleter, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QSizePolicy, QDialog, QStyledItemDelegate, QSpinBox,QTabWidget
 from PyQt5.QtCore import QVariant,QAbstractTableModel,QModelIndex,QThreadPool, QRunnable, pyqtSignal, QTimer, QObject, QCoreApplication, QDateTime, Qt, QEventLoop,pyqtSlot
 from PyQt5 import QtCore
@@ -656,12 +656,16 @@ class Browser(QWidget):
             return f
 
     def non_blocking_sleep(self, ms):
+        # special sleep function that can be used by a background/foreground thread, without causing a hang
+
         loop = QEventLoop()
         QTimer.singleShot(ms, loop.quit)
         # ic("sleepy")
         loop.exec_()
 
     def sftp_listdir_attr(self, remote_path ):
+        # get remote directory listing with attributes from the remote_path
+
         job_id = create_random_integer()
         response_queues[job_id] = queue.Queue()
         diag = f"FileBrowser sftp_listdir_attr() job_id {job_id} session_id {self.session_id} remote_path {remote_path}"
@@ -690,10 +694,13 @@ class Browser(QWidget):
 
     def on_header_clicked(self, logicalIndex):
         # Check the current sort order and toggle it
+        # not the best, should really be revised 
         order = Qt.DescendingOrder if self.table.horizontalHeader().sortIndicatorOrder() == Qt.AscendingOrder else Qt.AscendingOrder
         self.table.sortByColumn(logicalIndex, order)
 
     def is_remote_directory(self, remote_path ):
+        # check to see if remote_path is in fact a file or a directory on the current remote connection 
+
         job_id = create_random_integer()
         response_queues[job_id] = queue.Queue()
         # diag = f"FileBrowser is_remote_directory() job_id {job_id} session_id {self.session_id} remote_path {remote_path}"
@@ -722,6 +729,8 @@ class Browser(QWidget):
             return is_directory
 
     def is_remote_file(self, remote_path ):
+        # check to see if remote_path is in fact a file or a directory on the current remote connection
+
         job_id = create_random_integer()
         # diag = f"FileBrowser is_remote_file() job_id {job_id} session_id {self.session_id} remote_path {remote_path}"
         # ic(diag)
@@ -799,18 +808,24 @@ class Browser(QWidget):
                 self.model.get_files()
 
     def change_directory(self, path ):
+        # this is a function to change the current LOCAL working directory, it also uses this moment to refresh the local file list
+
         try:
             # ic("change_directory() localfilebrowser")
             # Local file browser
             os.chdir(path)
             sftp_current_creds[self.session_id]['current_local_directory'] = os.getcwd()
             self.model.get_files()  # Update local file browser with new directory contents
-            self.model.dumpObjectTree()
+            # self.model.dumpObjectTree()
         except Exception as e:
             # Append error message to the output_console
             self.message_signal.emit(f"change_directory() {e}")
 
     def double_click_handler(self, index):
+        # this function tries to figure out, more or less sans a lot of context, what 'index' is pointing at and then, what to do with it
+        # my logic here was, if its a directory change to it, if its a file transfer it
+        # if its a local file, probably want to upload it, if its a remote file, probably want to download it
+
         # path = item.text()
         # ic(path)
         # ic("Browser double_click_handler")
@@ -867,11 +882,16 @@ class Browser(QWidget):
             menu.exec_(current_browser.mapToGlobal(point))
 
     def upload_download(self):
+        # based on what the user clicked, let's decide if it's a local file needing uploading or a remote file needing downloading
+
         current_browser = self.focusWidget()
+        # did they click the local or remote browser
 
         if current_browser is not None and isinstance(current_browser, QTableView):
             index = current_browser.currentIndex()
+            # what thing did they click in that browser
             if index.isValid():
+                # and now, what is that thing?!
                 selected_item_text = current_browser.model().data(index, Qt.DisplayRole)
 
                 if selected_item_text:
