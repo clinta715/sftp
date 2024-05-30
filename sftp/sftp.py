@@ -1789,6 +1789,15 @@ class EditDialog(QDialog):
             self.load_data_from_file("sftp.json")
         except:
             ic("can't load sftp.json")
+            self.host_data = {
+                'localhost': {
+                    'username': 'guest',
+                    'password': base64.b64encode('guest'.encode()).decode(),
+                    'port': 22
+                }
+            }
+            # Save the initial data to the file
+            self.save_data()         
 
         # Stretch the last section to fill the space
         header = self.table.horizontalHeader()
@@ -1814,9 +1823,6 @@ class EditDialog(QDialog):
         selected_items = self.table.selectedItems()
 
         if selected_items:
-            diag = f"EditDialog connect_button_clicked() selected_items {selected_items}"
-            ic(diag)
-
             first_selected_item = selected_items[0]
             row = first_selected_item.row()
         else:
@@ -1937,8 +1943,6 @@ class EditDialog(QDialog):
         new_host_data = {}
         seen_hostnames = set()
 
-        ic("save_data() save the data")
-
         for row in range(self.table.rowCount()):
             if self.table.item(row, 0) == None:
                 continue
@@ -1948,7 +1952,6 @@ class EditDialog(QDialog):
                 continue
             if self.table.item(row, 3) == None:
                 continue
-            ic("save_data() data will be saved")
             # Repeat similar checks for other columns.
 
             hostname = self.table.item(row, 0).text()
@@ -2182,6 +2185,8 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         self.hostname_combo.editingFinished.connect(self.hostname_changed)        
 
     def prepare_container_widget(self, use_terminal=False):
+        # was in the middle of adding some code for ssh terminal windows and decided to ... not do that
+        # outside the scope of a quick and dirty sftp application
         self.use_terminal = use_terminal
         # Create a container widget
         container_widget = QWidget()
@@ -2260,7 +2265,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
             title = sftp_current_creds.get(self.session_id, {}).get('hostname', 'Default Hostname')
         except KeyError:
             title = "Unknown Hostname"
-            ic("Session ID not found in sftp_current_creds")
         return title
 
     def setup_output_console(self):
@@ -2280,7 +2284,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
             self.container_layout.addWidget(self.left_browser)
 
         except Exception as e:
-            ic(e)
+            pass
 
     def setup_right_browser(self, session_id):
         self.session_id = session_id
@@ -2351,7 +2355,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         self.tab_widget.setCurrentIndex(self.tab_widget.count() - 1)
 
     def onEntryDoubleClicked(self, entry):
-        ic(entry)
         hostname = entry.get("hostname", "localhost")
         username = entry.get("username", "guest")
         password = entry.get("password", "guest")
@@ -2423,8 +2426,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
     def connect(self, hostname="localhost", username="guest", password="guest", port="22", use_terminal=False):
         self.session_id = create_random_integer()
         self.use_terminal = use_terminal
-        diag = f"connect() session_id {self.session_id}"
-        ic(diag)
 
         if hostname == "localhost":
             if self.hostname_combo.currentText():
@@ -2463,8 +2464,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
             'username' : self.temp_username,
             'password' : self.temp_password,
             'port' : self.temp_port, }
-
-        ic(sftp_current_creds[self.session_id])
 
         self.YouAddTab(self.session_id, self.container_widget, self.use_terminal)
 
