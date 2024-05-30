@@ -503,6 +503,7 @@ class Browser(QWidget):
         self.setLayout(self.layout)
 
     def split_path(self, path):
+        # try to deal with windows backslashes
         if "\\" in path:
             # Use "\\" as the separator
             head, tail = path.rsplit("\\", 1)
@@ -601,8 +602,6 @@ class Browser(QWidget):
 
     def sftp_listdir(self, remote_path ):
         job_id = create_random_integer()
-        diag = f"FileBrowser sftp_listdir() job_id {job_id} session_id {self.session_id} remote_path {remote_path}"
-        ic(diag)
         response_queues[job_id] = queue.Queue()
 
         add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, sftp_current_creds[self.session_id]['hostname'], sftp_current_creds[self.session_id]['username'], sftp_current_creds[self.session_id]['password'], sftp_current_creds[self.session_id]['port'], "listdir", job_id )
@@ -640,9 +639,6 @@ class Browser(QWidget):
 
         job_id = create_random_integer()
         response_queues[job_id] = queue.Queue()
-        diag = f"FileBrowser sftp_listdir_attr() job_id {job_id} session_id {self.session_id} remote_path {remote_path}"
-        ic(diag)
-        ic(sftp_current_creds[self.session_id])
 
         add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, sftp_current_creds[self.session_id]['hostname'], sftp_current_creds[self.session_id]['username'], sftp_current_creds[self.session_id]['password'], sftp_current_creds[self.session_id]['port'], "listdir_attr", job_id )
 
@@ -652,7 +648,6 @@ class Browser(QWidget):
         if response == "error":
             error = response_queues[job_id].get_nowait()
             self.message_signal.emit(f"FileBrowser sftp_listdir_attr() {error}")
-            ic(error)
             f = False
         else:
             list = response_queues[job_id].get_nowait()
@@ -918,15 +913,13 @@ class Browser(QWidget):
                         return
                 except Exception as e:
                     self.message_signal.emit(f"{e}")
-                    ic(e)
+                    pass
 
             local_contents = os.listdir(source_directory)
 
             for entry in local_contents:
                 entry_path = os.path.join(source_directory, entry)
-                ic(entry_path)
                 remote_entry_path = os.path.join(remote_folder, entry)
-                ic(remote_entry_path)
 
                 job_id = create_random_integer()
 
@@ -945,7 +938,6 @@ class Browser(QWidget):
 
         except Exception as e:
             self.message_signal.emit(f"upload_directory() {e}")
-            ic(e)
 
     def show_prompt_dialog(self, text, title):
         dialog = QMessageBox(self.parent())
@@ -974,8 +966,6 @@ class Browser(QWidget):
                 exist = True
 
         except Exception as e:
-            diag = f"FileBrowser sftp_exists() {e}"
-            ic(diag)
             self.message_signal.emit(f"sftp_exists() {e}")
             exist = False
 
@@ -1117,9 +1107,6 @@ class RemoteFileBrowser(FileBrowser):
         job_id = create_random_integer()
         response_queues[job_id] = queue.Queue()
 
-        ic("sftp_getcwd()")
-        ic(self.session_id)
-
         add_sftp_job(sftp_current_creds[self.session_id]['current_remote_directory'], True, ".", True, sftp_current_creds[self.session_id]['hostname'], sftp_current_creds[self.session_id]['username'], sftp_current_creds[self.session_id]['password'], sftp_current_creds[self.session_id]['port'], "getcwd", job_id)
 
         self.waitjob(job_id)
@@ -1188,13 +1175,11 @@ class RemoteFileBrowser(FileBrowser):
                 # Retrieve the file path from the model
                 # ic("RemoteFileBrowser double_click_handler index.isValid()")
                 temp_path = self.model.data(index, Qt.DisplayRole)
-                ic(temp_path)
 
                 if temp_path != "..":
                     # ic("RemoteFileBrowser double_click_handler temp_path != ..")
                     path = os.path.join( sftp_current_creds[self.session_id]['current_remote_directory'], temp_path )
                     if self.is_remote_directory(temp_path):
-                        ic(temp_path)
                         self.change_directory(path.replace("\\", "/"))
                     elif self.is_remote_file(temp_path):
                         # ic("RemoteFileBrowser double_click_handler is_remote_file()")
@@ -1270,21 +1255,18 @@ class RemoteFileBrowser(FileBrowser):
             # Remove files
             for entry in files:
                 entry_path = os.path.join(remote_path, entry.filename)
-                ic("Removing file:", entry_path)
                 self.message_signal.emit(f"Removing file: {entry_path}")
                 self.sftp_remove(entry_path)
 
             # Recursively remove subdirectories
             for entry in subdirectories:
                 entry_path = os.path.join(remote_path, entry.filename)
-                ic("Recursing into subdirectory:", entry_path)
                 self.message_signal.emit(f"Recursing into subdirectory: {entry_path}")
                 self.remove_directory_with_prompt(entry_path)
 
 
             # Remove the directory
             self.sftp_rmdir(remote_path)
-            ic("Removing directory:", remote_path)
             self.message_signal.emit(f"Directory '{remote_path}' removed successfully.")
             self.model.get_files()
 
@@ -1364,7 +1346,6 @@ class RemoteFileBrowser(FileBrowser):
                     self.download_directory(entry_path.replace("\\", "/"), local_folder)
                 else:
                     # If it's a file, download it
-                    ic("download_directory() is_remote_directory() no")
                     self.message_signal.emit(f"download_directory() {entry_path}, {local_entry_path}")
 
                     if os.path.exists(local_entry_path):
@@ -1440,7 +1421,6 @@ class DownloadWorker(QRunnable):
         self.signals.progress.emit(self.transfer_id,percentage)
 
     def run(self):
-        ic("download_thread() run")
         try:
             self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             self.ssh.connect(self.hostname, self.port, self.username, self.password)
@@ -1449,7 +1429,6 @@ class DownloadWorker(QRunnable):
             self.signals.message.emit(self.transfer_id,f"download_thread() {e}")
             return
 
-        ic("download_thread() connected (probably)")
         if self.is_source_remote and not self.is_destination_remote:
             # Download from remote to local
             self.signals.message.emit(self.transfer_id,f"download_thread() {self.job_source},{self.job_destination}")
@@ -1472,8 +1451,6 @@ class DownloadWorker(QRunnable):
             # must be a mkdir
             try:
                 if self.command == "mkdir":
-                    ic("download_thread() mkdir")
-
                     try:
                         self.sftp.mkdir(self.job_destination)
                         response_queues[self.transfer_id].put("success")
@@ -1485,9 +1462,6 @@ class DownloadWorker(QRunnable):
                         ic(e)
 
                 elif self.command == "listdir_attr":
-                    diag = f"download_thread() trying listdir_attr {self.job_source}"
-                    ic(diag)
-
                     try:
                         response = self.sftp.listdir_attr(self.job_source)
                         response_queues[self.transfer_id].put("success")
@@ -1499,8 +1473,6 @@ class DownloadWorker(QRunnable):
                         ic(e)
 
                 elif self.command == "listdir":
-                    ic("download_thread() listdir")
-
                     try:
                         response = self.sftp.listdir(self.job_source)
                         response_queues[self.transfer_id].put("success")
@@ -1512,8 +1484,6 @@ class DownloadWorker(QRunnable):
                         ic(e)
 
                 elif self.command == "chdir":
-                    ic("download_thread() chdir")
-
                     try:
                         self.sftp.chdir(self.job_source)
                         response_queues[self.transfer_id].put("success")
@@ -1525,8 +1495,6 @@ class DownloadWorker(QRunnable):
                         ic(e)
 
                 elif self.command == "rmdir":
-                    ic("download_thread() rmdir")
-
                     try:
                         self.sftp.rmdir(self.job_source)
                         response_queues[self.transfer_id].put("success")
@@ -1538,8 +1506,6 @@ class DownloadWorker(QRunnable):
                         ic(e)
 
                 elif self.command == "stat":
-                    ic("download_thread() stat")
-
                     try:
                         attr = self.sftp.stat(self.job_source)
                         response_queues[self.transfer_id].put("success")
@@ -1551,8 +1517,6 @@ class DownloadWorker(QRunnable):
                         ic(e)
 
                 elif self.command == "remove":
-                    ic("download_thread() remove")
-
                     try:
                         self.sftp.remove(self.job_source)
                         response_queues[self.transfer_id].put("success")
@@ -1564,8 +1528,6 @@ class DownloadWorker(QRunnable):
                         ic(e)
 
                 elif self.command == "getcwd":
-                    ic("download_thread() getcwd")
-
                     try:
                         stdin, stdout, stderr = self.ssh.exec_command('cd {}'.format(self.job_source))
                         stdin, stdout, stderr = self.ssh.exec_command('pwd')
@@ -1674,8 +1636,6 @@ class BackgroundThreadWindow(QMainWindow):
             command = job.command
             # response_queue = job.response_queue
 
-            diag = f"{job.id} check and start transfers"
-            ic(diag)
             self.start_transfer(job.id, job.source_path, job.destination_path, job.is_source_remote, job.is_destination_remote, hostname, port, username, password, command )
 
     def start_transfer(self, transfer_id, job_source, job_destination, is_source_remote, is_destination_remote, hostname, port, username, password, command):
@@ -1701,11 +1661,7 @@ class BackgroundThreadWindow(QMainWindow):
         self.layout.addLayout(hbox)
 
         # Store references to the widgets for later use
-        diag = f"{transfer_id} start transfer"
-        ic(diag)
         new_transfer = Transfer(transfer_id=transfer_id, download_worker=DownloadWorker(transfer_id, job_source, job_destination, is_source_remote, is_destination_remote, hostname, port, username, password, command), active=True, hbox=hbox, progress_bar=progress_bar, cancel_button=cancel_button, tbox=textbox)
-        diag = f"{new_transfer.transfer_id} id"
-        ic(diag)
 
         # Create and configure the download worker
         new_transfer.download_worker.signals.progress.connect(lambda tid, val: self.update_progress(tid, val))
@@ -1723,8 +1679,6 @@ class BackgroundThreadWindow(QMainWindow):
 
         if transfer is None:
             self.text_console.append(f"No transfer found with ID {transfer_id}")
-            diag = f"{transfer_id} error"
-            ic(diag)
             return
 
         # Deactivate the transfer
