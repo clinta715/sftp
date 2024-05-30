@@ -130,6 +130,7 @@ class FileTableModel(QAbstractTableModel):
         self.get_files()
 
     def is_remote_browser(self):
+        # dummy function in local-files portion of code
         return False
 
     def get_files(self):
@@ -152,28 +153,24 @@ class FileTableModel(QAbstractTableModel):
             try:
                 name = item.name
             except Exception as e:
-                ic(e)
                 name = None
 
             # Get file size
             try:
                 size = item.stat().st_size
             except Exception as e:
-                ic(e)
                 size = None
 
             # Get file permissions
             try:
                 permissions = oct(item.stat().st_mode)[-4:]
             except Exception as e:
-                ic(e)
                 permissions = None
 
             # Get file modification time and convert it to a readable format
             try:
                 modified_time = datetime.fromtimestamp(item.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S')
             except Exception as e:
-                ic(e)
                 modified_time = None
 
             # Append the file information to the list
@@ -208,28 +205,24 @@ class FileTableModel(QAbstractTableModel):
                 try:
                     return file_info[0]
                 except Exception as e:
-                    ic(e)
                     return None
             elif column == 1:
                 # Size
                 try:
                     return str(file_info[1])
                 except Exception as e:
-                    ic(e)
                     return None
             elif column == 2:
                 # Permissions
                 try:
                     return file_info[2]
                 except Exception as e:
-                    ic(e)
                     return None
             elif column == 3:
                 # Modified Date
                 try:
                     return file_info[3]
                 except Exception as e:
-                    ic(e)
                     return None
         return QVariant()
 
@@ -248,19 +241,19 @@ class FileTableModel(QAbstractTableModel):
             try:
                 self.file_list.sort(key=lambda file_info: file_info[0], reverse=(order == Qt.DescendingOrder))
             except Exception as e:
-                ic(e)
+                pass
         elif column == 1:
             # Sort by Size (Numeric)
             try:
                 self.file_list.sort(key=lambda file_info: int(file_info[1]), reverse=(order == Qt.DescendingOrder))
             except Exception as e:
-                ic(e)
+                pass
         elif column == 2:
             # Sort by Permissions (String or Numeric, depending on representation)
             try:
                 self.file_list.sort(key=lambda file_info: file_info[2], reverse=(order == Qt.DescendingOrder))
             except Exception as e:
-                ic(e)
+                pass
         elif column == 3:
             # Sort by Modified Date (Date or Timestamp)
             # Assuming file_info[3] is a string representation of date, you might need to convert it to a datetime object
@@ -268,7 +261,7 @@ class FileTableModel(QAbstractTableModel):
             try:
                 self.file_list.sort(key=lambda file_info: file_info[3], reverse=(order == Qt.DescendingOrder))
             except Exception as e:
-                ic(e)
+                pass
 
         self.layoutChanged.emit()
 
@@ -292,15 +285,13 @@ class RemoteFileTableModel(QAbstractTableModel):
         return len(self.column_names)
 
     def data(self, index, role=Qt.DisplayRole):
-        # ic("entering data")
         if not index.isValid() or not (0 <= index.row() < len(self.file_list)):
-            ic("invalid index")
             return QVariant()
 
         try:
             file = self.file_list[index.row()]
         except Exception as e:
-            ic(e)
+            pass
 
         column = index.column()
 
@@ -309,25 +300,25 @@ class RemoteFileTableModel(QAbstractTableModel):
                 try:
                     return file[0]  # name
                 except Exception as e:
-                    ic(e)
+                    pass
                     return ""
             elif column == 1:
                 try:
                     return str(file[1])  # size
                 except Exception as e:
-                    ic(e)
+                    pass
                     return ""
             elif column == 2:
                 try:
                     return file[2]  # permissions
                 except Exception as e:
-                    ic(e)
+                    pass
                     return ""
             elif column == 3:
                 try:
                     return file[3]  # modified_date
                 except Exception as e:
-                    ic(e)
+                    pass
                     return ""
         return QVariant()
 
@@ -344,31 +335,30 @@ class RemoteFileTableModel(QAbstractTableModel):
             try:
                 self.file_list.sort(key=lambda x: x[0], reverse=(order == Qt.DescendingOrder))
             except Exception as e:
-                ic(e)
+                pass
         elif column == 1:
             # Sort by file size
             try:
                 self.file_list.sort(key=lambda x: x[1], reverse=(order == Qt.DescendingOrder))
             except Exception as e:
-                ic(e)
+                pass
         elif column == 2:
             # Sort by file permissions
             try:
                 self.file_list.sort(key=lambda x: x[2], reverse=(order == Qt.DescendingOrder))
             except Exception as e:
-                ic(e)
+                pass
         elif column == 3:
             # Sort by modified date
             try:
                 self.file_list.sort(key=lambda x: x[3], reverse=(order == Qt.DescendingOrder))
             except Exception as e:
-                ic(e)
+                pass
 
         ic("Emitting layoutchanged")
         self.layoutChanged.emit()
 
     def get_files(self):
-        ic("get files remotefiletablemodel")
         """
         Fetches file attributes from the specified path using the given SFTP connection.
         :param sftp: Paramiko SFTP client object
@@ -390,7 +380,6 @@ class RemoteFileTableModel(QAbstractTableModel):
             try:
                 name = item.filename
             except Exception as e:
-                ic(e)
                 name = ""
 
             # Get file size
@@ -398,27 +387,22 @@ class RemoteFileTableModel(QAbstractTableModel):
                 size = item.st_size
             except Exception as e:
                 size = 0
-                ic(e)
 
             # Get file permissions (convert to octal string)
             try:
                 permissions = oct(item.st_mode)[-4:]
             except Exception as e:
                 permissions = ""
-                ic(e)
 
             # Get file modification time and convert it to a readable format
             try:
                 modified_time = QDateTime.fromSecsSinceEpoch(item.st_mtime).toString(Qt.ISODate)
             except Exception as e:
                 modified_time = ""
-                ic(e)
 
             # Append the file information to the list
             self.file_list.append((name, size, permissions, modified_time))
 
-            # Emit signal to update the view
-        ic(self.file_list)
         # Emit dataChanged for the entire range of data
         top_left = self.createIndex(0, 0)  # Top left cell of the table
         bottom_right = self.createIndex(self.rowCount() - 1, self.columnCount() - 1)  # Bottom right cell
@@ -427,15 +411,16 @@ class RemoteFileTableModel(QAbstractTableModel):
         self.layoutChanged.emit()
 
     def non_blocking_sleep(self, ms):
+        # sleep function that shouldn't block any other threads
         loop = QEventLoop()
         QTimer.singleShot(ms, loop.quit)
-        # ic("sleep")
         loop.exec_()
 
     def sftp_listdir_attr(self, remote_path):
         job_id = create_random_integer()
         response_queues[job_id] = queue.Queue()
 
+        # the slashes/backslashes stuff is an attempt at windows compatibility
         add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, sftp_current_creds[self.session_id]['hostname'], sftp_current_creds[self.session_id]['username'], sftp_current_creds[self.session_id]['password'], sftp_current_creds[self.session_id]['port'], "listdir_attr", job_id )
 
         while response_queues[job_id].empty():
@@ -447,7 +432,6 @@ class RemoteFileTableModel(QAbstractTableModel):
             error = response_queues[job_id].get_nowait()
             diag = f"RemoteFileTableModel sftp_listdir_attr() {error}"
             # always 2 responses on stack, if its an error, get message
-            ic(diag)
             f = False
         else:
             # if its not an error its a success and heres the list
@@ -482,7 +466,6 @@ class Browser(QWidget):
     message_signal = pyqtSignal(str)
 
     def init_ui(self):
-        ic("FileBrowser init_ui()")
         self.layout = QVBoxLayout()
         self.label = QLabel(self.title)
         self.layout.addWidget(self.label)
@@ -513,9 +496,7 @@ class Browser(QWidget):
         self.layout.addWidget(self.table)  # Correctly add the table to the layout
 
         # Add the table and status bar to the layout
-        # self.status_bar = QStatusBar()
         self.progressBar = QProgressBar()
-        # self.status_bar.showMessage("Ready")
         self.layout.addWidget(self.progressBar)
 
         # Set the main layout of the widget
@@ -558,8 +539,6 @@ class Browser(QWidget):
 
     def sftp_mkdir(self, remote_path):
         job_id = create_random_integer()
-        # diag = f"FileBrowser sftp_mkdir() job_id {job_id} session_id {self.session_id} remote_path {remote_path}"
-        # ic(diag)
         response_queues[job_id] = queue.Queue()
 
         add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, sftp_current_creds[self.session_id]['hostname'], sftp_current_creds[self.session_id]['username'], sftp_current_creds[self.session_id]['password'], sftp_current_creds[self.session_id]['port'], "mkdir", job_id )
@@ -571,7 +550,6 @@ class Browser(QWidget):
         if response == "error":
             error = response_queues[job_id].get_nowait()
             self.message_signal.emit(f"FileBrowser sftp_mkdir() {error}")
-            ic(error)
             f = False
         else:
             # if its a success then we dont care about the response and the queue will be deleted
@@ -583,8 +561,6 @@ class Browser(QWidget):
 
     def sftp_rmdir(self, remote_path):
         job_id = create_random_integer()
-        # diag = f"FileBrowser sftp_rmdir() job_id {job_id} session_id {self.session_id} remote_path {remote_path}"
-        # ic(diag)
         response_queues[job_id] = queue.Queue()
 
         add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, sftp_current_creds[self.session_id]['hostname'], sftp_current_creds[self.session_id]['username'], sftp_current_creds[self.session_id]['password'], sftp_current_creds[self.session_id]['port'], "rmdir", job_id )
@@ -595,7 +571,6 @@ class Browser(QWidget):
         if response == "error":
             error = response_queues[job_id].get_nowait()
             self.message_signal.emit(f"FileBrowser sftp_rmdir() {error}")
-            ic(error)
             f = False
         else:
             f = True
@@ -606,8 +581,6 @@ class Browser(QWidget):
 
     def sftp_remove(self, remote_path ):
         job_id = create_random_integer()
-        # diag = f"FileBrowser sftp_remove() job_id {job_id} session_id {self.session_id} remote_path {remote_path}"
-        # ic(diag)
         response_queues[job_id] = queue.Queue()
 
         add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, sftp_current_creds[self.session_id]['hostname'], sftp_current_creds[self.session_id]['username'], sftp_current_creds[self.session_id]['password'], sftp_current_creds[self.session_id]['port'], "remove", job_id )
@@ -660,7 +633,6 @@ class Browser(QWidget):
 
         loop = QEventLoop()
         QTimer.singleShot(ms, loop.quit)
-        # ic("sleepy")
         loop.exec_()
 
     def sftp_listdir_attr(self, remote_path ):
@@ -703,8 +675,6 @@ class Browser(QWidget):
 
         job_id = create_random_integer()
         response_queues[job_id] = queue.Queue()
-        # diag = f"FileBrowser is_remote_directory() job_id {job_id} session_id {self.session_id} remote_path {remote_path}"
-        # ic(diag)
 
         try:
             add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, sftp_current_creds[self.session_id]['hostname'], sftp_current_creds[self.session_id]['username'], sftp_current_creds[self.session_id]['password'], sftp_current_creds[self.session_id]['port'], "stat", job_id )
@@ -732,8 +702,6 @@ class Browser(QWidget):
         # check to see if remote_path is in fact a file or a directory on the current remote connection
 
         job_id = create_random_integer()
-        # diag = f"FileBrowser is_remote_file() job_id {job_id} session_id {self.session_id} remote_path {remote_path}"
-        # ic(diag)
         response_queues[job_id] = queue.Queue()
 
         try:
@@ -811,12 +779,10 @@ class Browser(QWidget):
         # this is a function to change the current LOCAL working directory, it also uses this moment to refresh the local file list
 
         try:
-            # ic("change_directory() localfilebrowser")
             # Local file browser
             os.chdir(path)
             sftp_current_creds[self.session_id]['current_local_directory'] = os.getcwd()
             self.model.get_files()  # Update local file browser with new directory contents
-            # self.model.dumpObjectTree()
         except Exception as e:
             # Append error message to the output_console
             self.message_signal.emit(f"change_directory() {e}")
@@ -826,9 +792,6 @@ class Browser(QWidget):
         # my logic here was, if its a directory change to it, if its a file transfer it
         # if its a local file, probably want to upload it, if its a remote file, probably want to download it
 
-        # path = item.text()
-        # ic(path)
-        # ic("Browser double_click_handler")
         if index.isValid():
             # Retrieve the data from the model
             path = self.model.data(index, Qt.DisplayRole)
@@ -968,8 +931,6 @@ class Browser(QWidget):
                 job_id = create_random_integer()
 
                 if os.path.isdir(entry_path):
-                    # diag = f"FileBrowser upload_directory() mkdir {remote_folder}"
-                    # ic(diag)
                     queue_item = QueueItem( os.path.basename(entry_path), job_id )
                     queue_display.append(queue_item)
                     self.sftp_mkdir(remote_entry_path.replace("\\", "/"))
@@ -998,8 +959,6 @@ class Browser(QWidget):
     def sftp_exists(self, path):
         job_id = create_random_integer()
         response_queues[job_id] = queue.Queue()
-        # diag = f"FileBrowser sftp_exists() job_id {job_id} session_id {self.session_id} path {path}"
-        # ic(diag)
 
         try:
             add_sftp_job(path.replace("\\", "/"), True, path.replace("\\", "/"), True, sftp_current_creds[self.session_id]['hostname'], sftp_current_creds[self.session_id]['username'], sftp_current_creds[self.session_id]['password'], sftp_current_creds[self.session_id]['port'], "stat", job_id )
@@ -1056,9 +1015,6 @@ class FileBrowser(Browser):
         # Resize the first column based on its contents
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
 
-        # ic(self.table)
-        # ic(self.model)
-
     def remove_directory_with_prompt(self, local_path=None):
         # for removing LOCAL directories
         if local_path == None or local_path == False:
@@ -1070,7 +1026,6 @@ class FileBrowser(Browser):
                     selected_item = current_browser.model().data(current_index, Qt.DisplayRole)
                     local_path = selected_item
                     if selected_item is not None:
-                        # local_path = selected_item
                         local_path = os.path.join( sftp_current_creds[self.session_id]['current_local_directory'], selected_item )
                         ic(local_path)
             else:
@@ -1132,8 +1087,6 @@ class RemoteFileBrowser(FileBrowser):
         super().__init__(title, session_id, parent)  # Initialize the FileBrowser parent class
         self.model = RemoteFileTableModel(self.session_id)
         self.table.setModel(self.model)
-        # ic(self.table)
-        # ic(self.model)
         # Set horizontal scroll bar policy for the entire table
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
 
@@ -1152,8 +1105,6 @@ class RemoteFileBrowser(FileBrowser):
         )
 
         if ok and directory_name:
-            # directory_path = os.path.join(self.sftp.getcwd(), directory_name)
-
             try:
                 # Attempt to create the directory locally
                 self.sftp_mkdir(directory_name)
@@ -1186,28 +1137,19 @@ class RemoteFileBrowser(FileBrowser):
         return new_path
 
     def change_directory(self, path ):
-        # ic("change directory remotefilebrowser")
         job_id = create_random_integer()
         response_queues[job_id] = queue.Queue()
-        # diag = f"RemoteFileBrowser change_directory() job_id {job_id} session_id {self.session_id} path {path}"
-        # ic(diag)
         if sftp_current_creds[self.session_id]['current_remote_directory'] == ".":
             sftp_current_creds[self.session_id]['current_remote_directory'] = self.sftp_getcwd()
 
         try:
             # Remote file browser
-            # if sftp_current_creds[self.session_id]['current_remote_directory'] == ".":
-            #    sftp_current_creds[self.session_id]['current_remote_directory'] = self.sftp_getcwd()
             if path == "..":
                 head, tail = self.split_path(sftp_current_creds[self.session_id]['current_remote_directory'])
                 new_path = head
-                ic(new_path)
             else:
                 # Ensure there's a trailing slash at the end of the input path
-                # if not path.endswith(os.path.sep):
-                #    path += os.path.sep
                 new_path = os.path.join(sftp_current_creds[self.session_id]['current_remote_directory'],path)
-                ic(new_path)
 
             # sessions are transient but lets make sure the folder exists
             add_sftp_job(new_path.replace("\\", "/"), True, new_path.replace("\\", "/"), True, sftp_current_creds[self.session_id]['hostname'], sftp_current_creds[self.session_id]['username'], sftp_current_creds[self.session_id]['password'], sftp_current_creds[self.session_id]['port'], "chdir", job_id)
@@ -1227,7 +1169,6 @@ class RemoteFileBrowser(FileBrowser):
                 sftp_current_creds[self.session_id]['current_remote_directory'] = new_path
 
             self.message_signal.emit(f"{new_path}")
-            # ic("self.model.get_files()")
             self.model.get_files()
             self.table.viewport().update()
             f = True
@@ -1270,7 +1211,6 @@ class RemoteFileBrowser(FileBrowser):
 
                 return True
             else:
-                ic("RemoteFileBrowser double_click_handler invalid index")
                 return False
 
         except Exception as e:
@@ -1295,23 +1235,17 @@ class RemoteFileBrowser(FileBrowser):
     def remove_directory_with_prompt(self, remote_path=None):
         if remote_path == None or remote_path == False:
             current_browser = self.focusWidget()
-            # ic(current_browser)
             if current_browser is not None:
                 current_index = current_browser.currentIndex()
-                # ic(current_index)
                 if current_index.isValid():
                     # Assuming the first column holds the item text you need
-                    ic(sftp_current_creds[self.session_id]['current_remote_directory'])
                     selected_item = current_browser.model().data(current_index, Qt.DisplayRole)
                     if sftp_current_creds[self.session_id]['current_remote_directory'] == '.':
                         temp_path = self.sftp_getcwd()
                     sftp_current_creds[self.session_id]['current_remote_directory'] = self.remove_trailing_dot(temp_path)
                     remote_path = os.path.join( sftp_current_creds[self.session_id]['current_remote_directory'], selected_item )
-                ic(selected_item)
             else:
                 return
-
-        ic(remote_path)
 
         try:
             # Get attributes of directory contents
@@ -1399,7 +1333,7 @@ class RemoteFileBrowser(FileBrowser):
                 # Check if 'always' option was selected before
                 if self.user_choice == 'always':
                     pass
-                    # If not, show the dialog with 'always' option
+                # If not, show the dialog with 'always' option
                 response = QMessageBox.question(
                     self,
                     'Folder Exists',
@@ -1426,7 +1360,6 @@ class RemoteFileBrowser(FileBrowser):
 
                 # If it's a directory, recursively download its contents
                 if self.is_remote_directory(entry_path.replace("\\", "/")):
-                    ic("download_directory() is_remote_directory() yes")
                     self.message_signal.emit(f"download_directory() {entry_path}, {local_folder}")
                     self.download_directory(entry_path.replace("\\", "/"), local_folder)
                 else:
@@ -1438,26 +1371,24 @@ class RemoteFileBrowser(FileBrowser):
                         if self.user_choice == 'always':
                             pass
                             # If not, show the dialog with 'always' option
-                            response = QMessageBox.question(
-                                self,
-                                'Folder Exists',
-                                f"The folder '{local_folder}' already exists. Do you want to proceed?",
-                                QMessageBox.Yes | QMessageBox.No | QMessageBox.YesToAll,
-                                QMessageBox.No
-                            )
-                            if response == QMessageBox.YesToAll:
-                                self.user_choice = 'always'
-                            elif response == QMessageBox.No:
-                                return
-                        try:
-                            # print("remove")
-                            ic("download_directory() remove()")
-                            os.remove(local_entry_path.replace("\\","/"))
-                        except Exception as e:
-                            self.message_signal.emit(f"download_directory() {e}")
-                            ic(e)
-                            # print("except except")
-                            pass
+                        
+                        # changed indent here after noting the 'pass' statement above... 
+                        response = QMessageBox.question(
+                            self,
+                            'Folder Exists',
+                            f"The folder '{local_folder}' already exists. Do you want to proceed?",
+                            QMessageBox.Yes | QMessageBox.No | QMessageBox.YesToAll,
+                            QMessageBox.No
+                        )
+                        if response == QMessageBox.YesToAll:
+                            self.user_choice = 'always'
+                        elif response == QMessageBox.No:
+                            return
+                    try:
+                        os.remove(local_entry_path.replace("\\","/"))
+                    except Exception as e:
+                        self.message_signal.emit(f"download_directory() {e}")
+                        pass
 
                     self.message_signal.emit(f"download_directory() {entry_path}, {local_entry_path}")
                     job_id = create_random_integer()
@@ -1505,35 +1436,23 @@ class DownloadWorker(QRunnable):
         # """Return progress every 50 MB"""
         if self._stop_flag:
             raise Exception("Transfer interrupted")
-        # if self.convert_unit(transferred, SIZE_UNIT.MB) % 5 != 0:
-            # return
         percentage = round((float(transferred) / float(tobe_transferred)) * 100)
         self.signals.progress.emit(self.transfer_id,percentage)
 
     def run(self):
         ic("download_thread() run")
         try:
-            ic("download_thread() set missing host key policy")
             self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            # ic(self.hostname)
-            # ic(self.port)
-            # ic(self.username)
-            # ic(self.password)
             self.ssh.connect(self.hostname, self.port, self.username, self.password)
-            # ic("download_thread() sftp init")
             self.sftp = self.ssh.open_sftp()
         except Exception as e:
             self.signals.message.emit(self.transfer_id,f"download_thread() {e}")
-            ic(f"download_worker() {e}")
-            # pass
             return
 
         ic("download_thread() connected (probably)")
         if self.is_source_remote and not self.is_destination_remote:
             # Download from remote to local
             self.signals.message.emit(self.transfer_id,f"download_thread() {self.job_source},{self.job_destination}")
-            diag = f"download_thread() sftp.get {self.job_source},{self.job_destination}"
-            ic(diag)
             try:
                 self.sftp.get(self.job_source, self.job_destination, callback=self.progress)
             except:
@@ -1542,19 +1461,15 @@ class DownloadWorker(QRunnable):
             self.signals.finished.emit(self.transfer_id)
 
         elif self.is_destination_remote and not self.is_source_remote :
-            # ic("download_thread() not a download")
             # Upload from local to remote
             self.signals.message.emit(self.transfer_id,f"download_thread() {self.job_source},{self.job_destination}")
-            diag = f"download_thread() sftp.put {self.job_source},{self.job_destination}"
-            ic(diag)
             try:
                 self.sftp.put(self.job_source, self.job_destination, callback=self.progress)
             except:
                 self.signals.message.emit(self.transfer_id,f"Transfer {self.transfer_id} was interrupted.")
 
         elif self.is_source_remote and self.is_destination_remote:
-            # ic("download_thread() command")
-            #must be a mkdir
+            # must be a mkdir
             try:
                 if self.command == "mkdir":
                     ic("download_thread() mkdir")
@@ -1563,7 +1478,6 @@ class DownloadWorker(QRunnable):
                         self.sftp.mkdir(self.job_destination)
                         response_queues[self.transfer_id].put("success")
                         response_queues[self.transfer_id].put(self.job_destination)
-                        # ic("download_thread() mkdir success")
 
                     except Exception as e:
                         response_queues[self.transfer_id].put("error")
@@ -1576,10 +1490,8 @@ class DownloadWorker(QRunnable):
 
                     try:
                         response = self.sftp.listdir_attr(self.job_source)
-                        # ic(response)
                         response_queues[self.transfer_id].put("success")
                         response_queues[self.transfer_id].put(response)
-                        # ic("download_thread() listdir_attr success")
 
                     except Exception as e:
                         response_queues[self.transfer_id].put("error")
@@ -1655,8 +1567,6 @@ class DownloadWorker(QRunnable):
                     ic("download_thread() getcwd")
 
                     try:
-                        # getcwd_path = self.sftp.getcwd()
-                        # self.sftp.chdir( self.job_source )
                         stdin, stdout, stderr = self.ssh.exec_command('cd {}'.format(self.job_source))
                         stdin, stdout, stderr = self.ssh.exec_command('pwd')
                         if stderr.read():
@@ -1665,7 +1575,6 @@ class DownloadWorker(QRunnable):
                         # .replace("\\", "/")
                         response_queues[self.transfer_id].put("success")
                         response_queues[self.transfer_id].put(getcwd_path)
-                        # ic(getcwd_path)
 
                     except Exception as e:
                         response_queues[self.transfer_id].put("error")
@@ -1680,10 +1589,8 @@ class DownloadWorker(QRunnable):
             finally:
                 self.sftp.close()
                 self.ssh.close()
-                # sftp_queue.task_done()
 
         self.signals.finished.emit(self.transfer_id)
-        # ic("download_thread() finished")
 
     def stop_transfer(self):
         self._stop_flag = True
@@ -1714,7 +1621,6 @@ class BackgroundThreadWindow(QMainWindow):
 
         central_widget = QWidget()
         central_widget.setLayout(self.layout)
-        # ic("backgroundThreadWindow() setCentralWidget(central_widget)")
         self.setCentralWidget(central_widget)
 
         self.thread_pool = QThreadPool.globalInstance()
@@ -1852,8 +1758,6 @@ class BackgroundThreadWindow(QMainWindow):
                     if widget:
                         widget.deleteLater()
 
-        # self.text_console.append(f"Transfer {transfer_id} remove from queue.")
-
         # Remove the transfer from the list
         self.transfers = [t for t in self.transfers if t.transfer_id != transfer_id]
         self.text_console.append("Transfer removed from the transfers list.")
@@ -1913,14 +1817,10 @@ class CustomTableWidget(QTableWidget):
                 self.parent().remove_row()
 
 class EditDialog(QDialog):
-    # ic("editdialog()")
     entryDoubleClicked = pyqtSignal(dict)
-    # ic("editdialog(2)")
 
     def __init__(self, host_data, parent=None):
-        # ic("editdialog(3)")
         super().__init__(parent)
-        # ic(host_data)
         self.host_data = host_data
         self.initUI()
         self.table.cellDoubleClicked.connect(self.onCellDoubleClicked)
@@ -1931,7 +1831,10 @@ class EditDialog(QDialog):
         self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.table.setHorizontalHeaderLabels(["Hostname", "Username", "Password", "Port"])
 
-        self.load_data_from_file("sftp.json")
+        try:
+            self.load_data_from_file("sftp.json")
+        except:
+            ic("can't load sftp.json")
 
         # Stretch the last section to fill the space
         header = self.table.horizontalHeader()
@@ -1962,8 +1865,6 @@ class EditDialog(QDialog):
 
             first_selected_item = selected_items[0]
             row = first_selected_item.row()
-            # column = first_selected_item.column()
-            # value = first_selected_item.text()
         else:
             return
 
@@ -1989,12 +1890,7 @@ class EditDialog(QDialog):
             temp_port = "22"
 
         entry = {"hostname": temp_hostname, "username": temp_username, "password": temp_password, "port": temp_port}
-        # ic("entry prepared")
-        diag = f"EditDialog onCellDoubleClicked() hostname {temp_hostname} username {temp_username} password {temp_password} port {temp_port}"
-        ic(diag)
-        # ic("prepare emission")
         self.entryDoubleClicked.emit(entry)
-        # ic("emission accomplished")
 
     def load_data(self):
         for row, (hostname, details) in enumerate(self.host_data.items()):
@@ -2035,23 +1931,18 @@ class EditDialog(QDialog):
         if action == addAction:
             self.add_row()
             self.save_data()
-            # ic("done")
         elif action == removeAction:
             self.remove_row()
         elif action == connectAction:
             self.onCellDoubleClicked(row, 1)
 
     def add_row(self):
-        # ic("add_row() adding row")
         row_count = self.table.rowCount()
         self.table.insertRow(row_count)
-        # ic("add_row() initializing cells")
         # Initialize cells in the new row (if needed)
         for col in range(self.table.columnCount()):
             item = QTableWidgetItem("")
-            # ic("add_row() bzzt")
             self.table.setItem(row_count, col, item)
-        # ic("add_row() return")
 
     def remove_row(self):
         row_count = self.table.rowCount()
@@ -2073,8 +1964,9 @@ class EditDialog(QDialog):
                     'port': details['port']
                 }
 
-        except FileNotFoundError:
-            # ic("load_data_from_file() sftp.json file not found. Creating initial data.")
+        except:
+            # revised the logic here so basiacally any error on reading the sftp.json file results in resetting it to example data
+            # executive decision was made that to do so was outside the scope of a 'quick and dirty' sftp application and would begin to approach 'time consuming and elegant'
             # Create initial data
             self.host_data = {
                 'localhost': {
@@ -2085,15 +1977,6 @@ class EditDialog(QDialog):
             }
             # Save the initial data to the file
             self.save_data()
-            self.save_data_to_file()
-
-        except json.JSONDecodeError:
-            # ic("load_data_from_file() Error decoding JSON. Starting with empty data.")
-            self.host_data = {}
-        except Exception as e:
-            error = f"An error occurred while loading data: {e}"
-            ic(error)
-            self.host_data = {}
 
     def save_data(self):
         # Takes data out of the table and puts it in self.host_data while removing duplicates
@@ -2132,18 +2015,14 @@ class EditDialog(QDialog):
 
                 seen_hostnames.add(hostname)
 
-        # ic("save_data() i am saving")
         self.host_data = new_host_data
         self.accept()
-        # ic("save_data() i have saved")
 
     def save_data_to_file(self):
         # saves data from host_data to sftp.json
         self.save_data()
-        # ic("save_data_to_file() saving to file")
         with open("sftp.json", "w") as file:
             json.dump(self.host_data, file, indent=4)
-        # ic("save_data_to_file() saved to file!")
 
 class EditDialogContainer(QWidget):
     def __init__(self, host_data, parent=None):
@@ -2172,8 +2051,6 @@ class EditDialogContainer(QWidget):
 
     def onCloseClicked(self):
         # Do any necessary cleanup
-        # ...
-        # Emit the custom signal
         super().load_saved_data()
 
 class CustomComboBox(QComboBox):
@@ -2272,7 +2149,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         self.edit_button = QPushButton("Edit Host Data")
         self.transfers_button = QPushButton("Show/Hide Transfers")
         self.clear_queue_button = QPushButton("Clear Queue")
-        self.terminal_connect_button = QPushButton("Terminal Connect")
+        # self.terminal_connect_button = QPushButton("Terminal Connect")
 
         # Initialize hostname combo box
         self.hostname_combo = CustomComboBox()  # Make sure CustomComboBox is defined
@@ -2328,7 +2205,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
     def init_button_layout(self):
         self.button_layout = QHBoxLayout()
         self.button_layout.addWidget(self.connect_button)
-        self.button_layout.addWidget(self.terminal_connect_button)
         self.button_layout.addWidget(self.transfers_button)
         self.button_layout.addWidget(self.clear_queue_button)
         self.button_layout.addWidget(self.edit_button)
@@ -2338,7 +2214,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
 
         # Connect the clicked signal of the connect button to the connect_button_pressed method
         self.connect_button.clicked.connect(self.connect_button_pressed)
-        self.terminal_connect_button.clicked.connect(self.terminal_connect_button_pressed)
 
     def setup_hostname_completer(self):
         # Make sure self.hostnames is initialized and filled with data
@@ -2397,8 +2272,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
 
     def YouAddTab(self, session_id, widget, use_terminal=False):
         self.session_id = session_id
-        # ic("YouAddTab()")
-        # ic(self.session_id)
         self.use_terminal = use_terminal
 
         # Assuming these methods are correctly defined and handle their tasks appropriately
@@ -2421,8 +2294,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
 
     def initialize_session_credentials(self, session_id):
         self.session_id = session_id
-        # ic("initialize_session_credentials()")
-        # ic(self.session_id)
 
         self.title = self.get_session_title(self.session_id)
         self.tab_widget.addTab(self.tab_widget, self.title)
@@ -2430,22 +2301,15 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
 
     def get_session_title(self, session_id):
         self.session_id = session_id
-        # ic("get_session_title()")
-        # ic(self.session_id)
 
         try:
-            # ic(sftp_current_creds[self.session_id])
             title = sftp_current_creds.get(self.session_id, {}).get('hostname', 'Default Hostname')
-            # ic(title)
         except KeyError:
             title = "Unknown Hostname"
-            # ic(self.session_id)
             ic("Session ID not found in sftp_current_creds")
         return title
 
     def setup_output_console(self):
-        # ic("setup_output_console()")
-
         # Initialize output console
         self.output_console = QTextEdit()
         self.output_console.setReadOnly(True)
@@ -2453,8 +2317,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
 
     def setup_left_browser(self, session_id):
         self.session_id = session_id
-        # ic("setup_left_browser()")
-        # ic(self.session_id)
 
         sftp_current_creds[self.session_id]['current_local_directory'] = os.getcwd()
         try:
@@ -2468,8 +2330,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
 
     def setup_right_browser(self, session_id):
         self.session_id = session_id
-        # ic("setup_right_browser()")
-        # ic(self.session_id)
         try:
             self.right_browser = RemoteFileBrowser(title=self.title, session_id=self.session_id)
             self.right_browser.table.setFocusPolicy(Qt.StrongFocus)
@@ -2482,12 +2342,9 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
     def log_connection_success(self):
         success_message = "Connected successfully"
         self.output_console.append(success_message)
-        # ic(success_message)
 
     def hostname_changed(self):
-        # ic("hostname_changed()")
         self.current_hostname = self.hostname_combo.currentText().strip()  # Strip whitespace
-        # ic("Current hostname:", self.current_hostname)
 
         # Access data from the nested dictionaries
         if self.current_hostname in self.host_data['hostnames']:
@@ -2495,12 +2352,10 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
             password = self.host_data['passwords'].get(self.current_hostname, '')
             port = self.host_data['ports'].get(self.current_hostname, '')
 
-            # ic("hostname_changed() Entry found:", username, password, port)
             self.username.setText(username)
             self.password.setText(password)
             self.port_selector.setText(port)
         else:
-            # ic("hostname_changed() Hostname not found in host_data.")
             self.username.clear()
             self.password.clear()
             self.port_selector.clear()
@@ -2512,8 +2367,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
 
     def on_value_changed(self, value):
         global MAX_TRANSFERS
-        # diag = f"on_value_changed() value {value}"
-        # ic(diag)
         MAX_TRANSFERS = value
 
     def update_completer(self):
@@ -2532,24 +2385,16 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
 
     def open_edit_dialog(self):
         # Initialize the dialog (if it's a popup dialog)
-        # self.dialog = EditDialog(self.host_data)
         # Connect the dialog's signals to appropriate slots
-        # self.dialog.entryDoubleClicked.connect(self.onEntryDoubleClicked)
         # Initialize the container widget for the tab
-        # ic(self.host_data)
         editDialogContainer = EditDialogContainer(self.host_data)
         editDialogContainer.editDialog.entryDoubleClicked.connect(self.onEntryDoubleClicked)
-        # ic("editDialogContainer created")
 
         # Add the container as a new tab
         self.tab_widget.addTab(editDialogContainer, "Edit Host Data")
-        # ic("    tab added")
 
-        # self.dialog.entryDoubleClicked.connect(self.connect)
-        # ic("    connections added")
         # Optionally, set the newly added tab as the current tab
         self.tab_widget.setCurrentIndex(self.tab_widget.count() - 1)
-        # ic("    index set")
 
     def onEntryDoubleClicked(self, entry):
         ic(entry)
@@ -2627,28 +2472,27 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         diag = f"connect() session_id {self.session_id}"
         ic(diag)
 
-        # ic("connect() connect")
         if hostname == "localhost":
             if self.hostname_combo.currentText():
                 self.temp_hostname = self.hostname_combo.currentText()
         else:
             self.temp_hostname = hostname
         ic(self.temp_hostname)
-        # ic("connect() username")
+
         if username == "guest":
             if self.username.text():
                 self.temp_username = self.username.text()
         else:
             self.temp_username = username
         ic(self.temp_username)
-        # ic("connect() password")
+
         if password == "guest":
             if self.password.text():
                 self.temp_password = self.password.text()
         else:
             self.temp_password = password
         ic(self.temp_password)
-        # ic("connect() port")
+
         if self.port_selector.text():
             self.temp_port = self.port_selector.text()
         else:
@@ -2669,8 +2513,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         ic(sftp_current_creds[self.session_id])
 
         self.YouAddTab(self.session_id, self.container_widget, self.use_terminal)
-        # diag = f"connect() session_id {self.session_id}"
-        # ic(diag)
 
         return self.session_id
 
@@ -2696,55 +2538,58 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
                 self.host_data['ports'][hostname] = details['port']
 
         except FileNotFoundError:
-            self.output_console.append("sftp.json file not found. Creating initial data.")
+            ic("sftp.json file not found. Creating initial data.")
             # Handle the creation of initial data
             self.create_initial_data()
+            self.load_saved_data()
 
         except json.JSONDecodeError:
             self.output_console.append("Error decoding JSON. Starting with empty data.")
-            self.clear_host_data()
+            self.create_initial_data()
+            # remove function that cleared the data, now we just populate it with some default crap
 
         except Exception as e:
             self.output_console.append(f"An error occurred while loading data: {e}")
-            self.clear_host_data()
+            self.create_initial_data()
 
         finally:
             self.update_completer()
 
     def create_initial_data(self):
         # Create initial data
-        self.host_data = {
-            "hostnames": {'localhost': 'localhost'},
-            "usernames": {'localhost': 'guest'},
-            "passwords": {'localhost': base64.b64encode('guest'.encode()).decode()},
-            "ports": {'localhost': 22}
-        }
+	    # Define the data to be written to the JSON file
+        # just some random crap as example data
+	    self.host_data = {
+		    "localhost": {
+			    "username": "guest",
+			    "password": "WjNWbGMzUT0=",
+			    "port": "22"
+		    },
+		    "172.16.1.16": {
+			    "username": "dairy",
+			    "password": "WjNWbGMzUT0=",
+			    "port": "22"
+		    }
+	    }
         # Save the initial data to the file
         self.save_data()
 
-    def clear_host_data(self):
-        # Clear host_data
-        self.host_data = {
-            "hostnames": {},
-            "usernames": {},
-            "passwords": {},
-            "ports": {}
-        }
-
     def save_data(self):
-        # Create a copy of host_data to encode passwords
-        data_to_save = {}
+        # Initialize an empty dictionary to hold the transformed data
+        data = {}
 
-        for hostname, details in self.host_data.items():
-            encoded_password = base64.b64encode(details['password'].encode()).decode()
-            data_to_save[hostname] = {
-                'username': details['username'],
-                'password': encoded_password,
-                'port': details['port']
+        # Iterate over the hostnames and fill in the data dictionary
+        for hostname in self.host_data['hostnames']:
+            data[hostname] = {
+                "username": self.host_data['usernames'].get(hostname, ""),
+                "password": self.host_data['passwords'].get(hostname, ""),
+                "port": self.host_data['ports'].get(hostname, "22")  # Default to port 22 if not specified
             }
+        file_name = "sftp.json"
 
-        with open("sftp.json", "w") as file:
-            json.dump(data_to_save, file, indent=4)
+        # Write the data to a JSON file
+        with open(file_name, 'w') as file:
+            json.dump(data, file, indent=4)
 
     def cleanup(self):
         add_sftp_job(".", False, ".", False, "localhost", "guest", "guest", 69, "end", 69)
@@ -2764,10 +2609,12 @@ def main():
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
 
+    # create the window we show the statuses of active transfers in, this is for downloads/uploads but also any background event like fetching a directory listing etc
     background_thread_window = BackgroundThreadWindow()
     background_thread_window.setWindowTitle("Transfer Queue")
     background_thread_window.show()
 
+    # create the main window of the application
     main_window = MainWindow()
     main_window.setWindowTitle("FTP/SFTP Client")
     main_window.resize(800, 600)
