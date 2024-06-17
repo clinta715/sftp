@@ -2508,25 +2508,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         finally:
             self.update_completer()
 
-    def create_initial_data(self):
-        # Create initial data
-	    # Define the data to be written to the JSON file
-        # just some random crap as example data
-	    self.host_data = {
-		    "localhost": {
-			    "username": "guest",
-			    "password": "WjNWbGMzUT0=",
-			    "port": "22"
-		    },
-		    "172.16.1.16": {
-			    "username": "dairy",
-			    "password": "WjNWbGMzUT0=",
-			    "port": "22"
-		    }
-	    }
-        # Save the initial data to the file
-        self.save_data()
-
     def save_data(self):
         # Initialize an empty dictionary to hold the transformed data
         data = {}
@@ -2544,6 +2525,22 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         with open(file_name, 'w') as file:
             json.dump(data, file, indent=4)
 
+    def create_initial_data(self):
+        """
+        Create initial data for the application.
+        This includes defining the data to be written to the JSON file.
+        """
+        # Example data for demonstration purposes
+        self.host_data = {
+            "localhost": {
+                "username": "guest",
+                "password": "WjNWbGMzUT0=",  # Note: This should be securely stored/encrypted
+                "port": 22  # Port should be an integer
+            }
+        }
+
+        self.save_data()
+        
     def cleanup(self):
         add_sftp_job(".", False, ".", False, "localhost", "guest", "guest", 69, "end", 69)
 
