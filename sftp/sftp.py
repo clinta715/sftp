@@ -9,14 +9,11 @@ import queue
 import stat
 from datetime import datetime
 import enum
-# from qtconsole.rich_jupyter_widget import RichJupyterWidget
-# from qtconsole.inprocess import QtInProcessKernelManager
 from PyQt5.QtWidgets import QPlainTextEdit,QTableView, QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QFileDialog, QListWidget, QTextEdit, QMessageBox, QInputDialog, QMenu, QCompleter, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QSizePolicy, QDialog, QStyledItemDelegate, QSpinBox,QTabWidget
 from PyQt5.QtCore import QVariant,QAbstractTableModel,QModelIndex,QThreadPool, QRunnable, pyqtSignal, QTimer, QObject, QCoreApplication, QDateTime, Qt, QEventLoop,pyqtSlot
 from PyQt5 import QtCore
 from stat import S_ISDIR
 from pathlib import Path
-# from qtermwidget import QTermWidget
 
 MAX_HOST_DATA_SIZE = 10  # Set your desired maximum size
 
@@ -1975,12 +1972,6 @@ class EditDialog(QDialog):
         self.host_data = new_host_data
         self.accept()
 
-    def save_data_to_file(self):
-        # saves data from host_data to sftp.json
-        self.save_data()
-        with open("sftp.json", "w") as file:
-            json.dump(self.host_data, file, indent=4)
-
 class EditDialogContainer(QWidget):
     def __init__(self, host_data, parent=None):
         super().__init__(parent)
@@ -2006,10 +1997,6 @@ class EditDialogContainer(QWidget):
 
         self.setLayout(layout)
 
-    def onCloseClicked(self):
-        # Do any necessary cleanup
-        super().load_saved_data()
-
 class CustomComboBox(QComboBox):
     editingFinished = pyqtSignal()
 
@@ -2020,59 +2007,6 @@ class CustomComboBox(QComboBox):
     def focusOutEvent(self, event):
         super().focusOutEvent(event)
         self.editingFinished.emit()
-
-class SshTerminalTab(QWidget):
-    def __init__(self, session_id, parent=None):
-        super().__init__(parent)
-        self.session_id = session_id
-
-        self.ssh_client = paramiko.SSHClient()
-        self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
-        self.layout = QVBoxLayout(self)
-
-        self.output_textedit = QPlainTextEdit(self)
-        self.output_textedit.setReadOnly(True)
-        self.output_textedit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
-        self.input_lineedit = QLineEdit(self)
-        self.input_lineedit.returnPressed.connect(self.send_command)
-
-        self.layout.addWidget(self.output_textedit)
-        self.layout.addWidget(self.input_lineedit)
-
-        self.load_credentials()
-
-    def load_credentials(self):
-        if self.session_id in sftp_current_creds:
-            credentials = sftp_current_creds[self.session_id]
-            self.connect_ssh(credentials['hostname'], credentials['username'], credentials['password'], credentials['port'])
-        else:
-            self.output_textedit.insertPlainText(f"Session ID '{self.session_id}' not found in credentials.\n")
-
-    def connect_ssh(self, host, username, password, port):
-        try:
-            self.ssh_client.connect(host, username=username, password=password, port=port)
-            self.output_textedit.insertPlainText("SSH connection established.\n")
-        except Exception as e:
-            self.output_textedit.insertPlainText(f"Error connecting to SSH: {e}\n")
-
-    @pyqtSlot()
-    def send_command(self):
-        command = self.input_lineedit.text()
-        self.input_lineedit.clear()
-
-        try:
-            stdin, stdout, stderr = self.ssh_client.exec_command(command)
-            output = stdout.read().decode()
-            error = stderr.read().decode()
-
-            if output:
-                self.output_textedit.insertPlainText(output)
-            if error:
-                self.output_textedit.insertPlainText(error)
-        except Exception as e:
-            self.output_textedit.insertPlainText(f"Error executing command: {e}\n")
 
 class MainWindow(QMainWindow):  # Inherits from QMainWindow
     def __init__(self):
@@ -2095,6 +2029,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
 
     def init_ui(self):
         # Initialize input widgets
+        self.create_initial_data()
         self.container_layout = QVBoxLayout()
         self.username = QLineEdit()
         self.password = QLineEdit()
@@ -2106,7 +2041,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         self.edit_button = QPushButton("Edit Host Data")
         self.transfers_button = QPushButton("Show/Hide Transfers")
         self.clear_queue_button = QPushButton("Clear Queue")
-        # self.terminal_connect_button = QPushButton("Terminal Connect")
 
         # Initialize hostname combo box
         self.hostname_combo = CustomComboBox()  # Make sure CustomComboBox is defined
@@ -2139,7 +2073,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         self.tab_widget.tabCloseRequested.connect(self.closeTab)
 
         # Additional setup if necessary
-        self.load_saved_data()
         self.setup_hostname_completer()
 
         # Add the tab widget to the top layout
@@ -2187,37 +2120,23 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
     def prepare_container_widget(self, use_terminal=False):
         # was in the middle of adding some code for ssh terminal windows and decided to ... not do that
         # outside the scope of a quick and dirty sftp application
-        self.use_terminal = use_terminal
         # Create a container widget
         container_widget = QWidget()
 
         # Create a layout for the browsers
         browser_layout = QHBoxLayout()
         
-        if not self.use_terminal:
-            browser_layout.addWidget(self.left_browser)
-            browser_layout.addWidget(self.right_browser)
-        else:
-            # Set up the terminal layout using QTermWidget
-            self.tab1 = SshTerminalTab(self.session_id, container_widget)
+        browser_layout.addWidget(self.left_browser)
+        browser_layout.addWidget(self.right_browser)
 
-        if not self.use_terminal:
-            # Create the main layout
-            main_layout = QVBoxLayout()
-            main_layout.addLayout(browser_layout)
-            main_layout.addWidget(self.output_console)
+        # Create the main layout
+        main_layout = QVBoxLayout()
+        main_layout.addLayout(browser_layout)
+        main_layout.addWidget(self.output_console)
 
-            # Set the main layout to the container widget
-            container_widget.setLayout(main_layout)
-            self.log_connection_success()
-        else:
-            # Create a layout for the container
-            container_layout = QVBoxLayout(container_widget)
-            container_layout.addWidget(self.tab1)
-            self.tab1.connect_ssh(sftp_current_creds[self.session_id]['hostname'],
-                                sftp_current_creds[self.session_id]['username'],
-                                sftp_current_creds[self.session_id]['password'],
-                                sftp_current_creds[self.session_id]['port'])
+        # Set the main layout to the container widget
+        container_widget.setLayout(main_layout)
+        self.log_connection_success()
             
         return container_widget
 
@@ -2229,9 +2148,8 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         # Delete the widget if necessary
         widget_to_remove.deleteLater()
 
-    def YouAddTab(self, session_id, widget, use_terminal=False):
+    def YouAddTab(self, session_id, widget):
         self.session_id = session_id
-        self.use_terminal = use_terminal
 
         # Assuming these methods are correctly defined and handle their tasks appropriately
         self.title = self.get_session_title(self.session_id)
@@ -2294,8 +2212,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
             self.right_browser.message_signal.connect(self.update_console)
 
         except Exception as e:
-            error_message = f"Error setting up right browser: {e}"
-            ic(error_message)
+            pass
 
     def log_connection_success(self):
         success_message = "Connected successfully"
@@ -2362,36 +2279,10 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
 
         self.connect(hostname=hostname, username=username, password=password, port=port)
 
-    def save_queue_to_file(self):
-        if not sftp_queue.empty():
-            items = [job.to_dict() for job in list(sftp_queue.queue)]
-            with open("sftp_queue.json", "w") as file:
-                json.dump(items, file)
-
-    def load_queue_from_file(self):
-        try:
-            with open("sftp_queue.json", "r") as file:
-                items = json.load(file)
-                for item in items:
-                    job = SFTPJob.from_dict(item)
-                    sftp_queue.put(job)
-
-            # Delete the file after loading the queue
-            os.remove("sftp_queue.json")
-
-        except FileNotFoundError:
-            pass  # File not found, start with an empty queue
-        except json.JSONDecodeError:
-            pass  # JSON decoding error, start with an empty queue
-        except Exception as e:
-            self.output_console.append(f"An error occurred while loading or deleting the file: {e}")
-            # Handle other exceptions or log them as needed
-
     def closeEvent(self, event):
         # Assuming you have a reference to BackgroundThreadWindow instance
         if self.backgroundThreadWindow:
             self.backgroundThreadWindow.close()
-        self.save_queue_to_file()
         event.accept()  # Accept the close event
 
     # Function to safely clear a queue
@@ -2401,7 +2292,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
                 q.get_nowait()  # Remove an item from the queue
                 q.task_done()  # Indicate that a formerly enqueued task is complete
         except Exception as e:
-            ic(e)
             pass  # Queue is empty, break the loop
 
     def clear_queue_clicked(self):
@@ -2419,40 +2309,31 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         # Call the connect method
         self.connect()
 
-    def terminal_connect_button_pressed(self):
-        # Call the connect method
-        self.connect(use_terminal=True)
-
-    def connect(self, hostname="localhost", username="guest", password="guest", port="22", use_terminal=False):
+    def connect(self, hostname="localhost", username="guest", password="guest", port="22"):
         self.session_id = create_random_integer()
-        self.use_terminal = use_terminal
 
         if hostname == "localhost":
             if self.hostname_combo.currentText():
                 self.temp_hostname = self.hostname_combo.currentText()
         else:
             self.temp_hostname = hostname
-        ic(self.temp_hostname)
 
         if username == "guest":
             if self.username.text():
                 self.temp_username = self.username.text()
         else:
             self.temp_username = username
-        ic(self.temp_username)
 
         if password == "guest":
             if self.password.text():
                 self.temp_password = self.password.text()
         else:
             self.temp_password = password
-        ic(self.temp_password)
 
         if self.port_selector.text():
             self.temp_port = self.port_selector.text()
         else:
             self.temp_port = port
-        ic(self.temp_port)
 
         # Create a new QWidget as a container for both the file table and the output console
         self.container_widget = QWidget()
@@ -2469,62 +2350,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
 
         return self.session_id
 
-    def load_saved_data(self, filename="sftp.json"):
-        try:
-            with open(filename, "r") as file:
-                data_loaded = json.load(file)
-
-            # Resetting host_data to ensure it's empty before loading new data
-            self.host_data = {
-                "hostnames": {},
-                "usernames": {},
-                "passwords": {},
-                "ports": {}
-            }
-
-            # Distribute the loaded data into respective dictionaries
-            for hostname, details in data_loaded.items():
-                decoded_password = base64.b64decode(details['password']).decode()
-                self.host_data['hostnames'][hostname] = hostname
-                self.host_data['usernames'][hostname] = details['username']
-                self.host_data['passwords'][hostname] = decoded_password
-                self.host_data['ports'][hostname] = details['port']
-
-        except FileNotFoundError:
-            ic("sftp.json file not found. Creating initial data.")
-            # Handle the creation of initial data
-            self.create_initial_data()
-            self.load_saved_data()
-
-        except json.JSONDecodeError:
-            self.output_console.append("Error decoding JSON. Starting with empty data.")
-            self.create_initial_data()
-            # remove function that cleared the data, now we just populate it with some default crap
-
-        except Exception as e:
-            self.output_console.append(f"An error occurred while loading data: {e}")
-            self.create_initial_data()
-
-        finally:
-            self.update_completer()
-
-    def save_data(self):
-        # Initialize an empty dictionary to hold the transformed data
-        data = {}
-
-        # Iterate over the hostnames and fill in the data dictionary
-        for hostname in self.host_data['hostnames']:
-            data[hostname] = {
-                "username": self.host_data['usernames'].get(hostname, ""),
-                "password": self.host_data['passwords'].get(hostname, ""),
-                "port": self.host_data['ports'].get(hostname, "22")  # Default to port 22 if not specified
-            }
-        file_name = "sftp.json"
-
-        # Write the data to a JSON file
-        with open(file_name, 'w') as file:
-            json.dump(data, file, indent=4)
-
     def create_initial_data(self):
         """
         Create initial data for the application.
@@ -2538,8 +2363,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
                 "port": 22  # Port should be an integer
             }
         }
-
-        self.save_data()
         
     def cleanup(self):
         add_sftp_job(".", False, ".", False, "localhost", "guest", "guest", 69, "end", 69)
