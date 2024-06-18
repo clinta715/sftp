@@ -1,5 +1,15 @@
 from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QListWidget, QTextEdit, QProgressBar, QSizePolicy
 from PyQt5.QtCore import QThreadPool, QRunnable, QTimer
+import enum
+import queue
+
+sftp_queue = queue.Queue()
+
+class SIZE_UNIT(enum.Enum):
+    BYTES = 1
+    KB = 2
+    MB = 3
+    GB = 4
 
 class DownloadWorker(QRunnable):
     def __init__(self, transfer_id, job_source, job_destination, is_source_remote, is_destination_remote, hostname, port, username, password, command=None):

@@ -268,14 +268,3 @@ class EditDialogContainer(QWidget):
         self.editDialog.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self.setLayout(layout)
-
-class CustomComboBox(QComboBox):
-    editingFinished = pyqtSignal()
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setEditable(True)
-
-    def focusOutEvent(self, event):
-        super().focusOutEvent(event)
-        self.editingFinished.emit()

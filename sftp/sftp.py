@@ -1,30 +1,15 @@
-from icecream import ic
 import sys
 import base64
 import os
-import json
-import shutil
-import paramiko
-import queue
-import stat
-from datetime import datetime
-import enum
-from PyQt5.QtWidgets import QPlainTextEdit,QTableView, QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QFileDialog, QListWidget, QTextEdit, QMessageBox, QInputDialog, QMenu, QCompleter, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QSizePolicy, QDialog, QStyledItemDelegate, QSpinBox,QTabWidget
-from PyQt5.QtCore import QVariant,QAbstractTableModel,QModelIndex,QThreadPool, QRunnable, pyqtSignal, QTimer, QObject, QCoreApplication, QDateTime, Qt, QEventLoop,pyqtSlot
-from PyQt5 import QtCore
-from stat import S_ISDIR
-from pathlib import Path
+from PyQt5.QtWidgets import QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QTextEdit, QCompleter, QComboBox, QSpinBox,QTabWidget
+from PyQt5.QtCore import pyqtSignal, QObject, QCoreApplication, Qt
 
+from sftp_downloadworkerclass import BackgroundThreadWindow
 from sftp_remotefilebrowserclass import RemoteFileBrowser
-from sftp_editwindowclass import EditDialog
+
+from sftp_downloadworkerclass import sftp_queue
  
 MAX_HOST_DATA_SIZE = 10  # Set your desired maximum size
-
-class SIZE_UNIT(enum.Enum):
-    BYTES = 1
-    KB = 2
-    MB = 3
-    GB = 4
 
 class SFTPJob:
     def __init__(self, source_path, is_source_remote, destination_path, is_destination_remote, hostname, username, password, port, command, id ):
@@ -58,9 +43,19 @@ class SFTPJob:
         data["password"] = base64.b64decode(data["password"]).decode()  # Decode password
         return SFTPJob(**data)
 
-sftp_queue = queue.Queue()
 response_queues = {}
 sftp_current_creds = {}
+
+class CustomComboBox(QComboBox):
+    editingFinished = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setEditable(True)
+
+    def focusOutEvent(self, event):
+        super().focusOutEvent(event)
+        self.editingFinished.emit()
 
 def create_random_integer():
     """
