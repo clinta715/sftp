@@ -34,6 +34,8 @@ class RemoteFileBrowser(FileBrowser):
                 self.message_signal.emit(f"Error creating directory: {e}")
 
     def sftp_getcwd(self):
+        global sftp_current_creds
+
         job_id = create_random_integer()
         response_queues[job_id] = queue.Queue()
 
@@ -54,6 +56,8 @@ class RemoteFileBrowser(FileBrowser):
         return new_path
 
     def change_directory(self, path ):
+        global sftp_current_creds
+
         job_id = create_random_integer()
         response_queues[job_id] = queue.Queue()
         if sftp_current_creds[self.session_id]['current_remote_directory'] == ".":
@@ -99,6 +103,8 @@ class RemoteFileBrowser(FileBrowser):
             return f
 
     def double_click_handler(self, index):
+        global sftp_current_creds
+
         # ic("RemoteFileBrowser double_click_handler")
         try:
             if index.isValid():
@@ -148,6 +154,8 @@ class RemoteFileBrowser(FileBrowser):
             return s
 
     def remove_directory_with_prompt(self, remote_path=None):
+        global sftp_current_creds
+
         if remote_path == None or remote_path == False:
             current_browser = self.focusWidget()
             if current_browser is not None:
@@ -204,6 +212,8 @@ class RemoteFileBrowser(FileBrowser):
             self.message_signal.emit(f"remove_directory_with_prompt() {e}")
 
     def upload_download(self):
+        global sftp_current_creds
+
         current_browser = self.focusWidget()
 
         if current_browser is not None and isinstance(current_browser, QTableView):

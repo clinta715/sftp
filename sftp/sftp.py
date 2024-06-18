@@ -1,14 +1,18 @@
 import sys
 import base64
 import os
+from icecream import ic
 from PyQt5.QtWidgets import QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QTextEdit, QCompleter, QComboBox, QSpinBox,QTabWidget
 from PyQt5.QtCore import pyqtSignal, QObject, QCoreApplication, Qt
 
+sftp_current_creds = {}
+
 from sftp_downloadworkerclass import BackgroundThreadWindow
 from sftp_remotefilebrowserclass import RemoteFileBrowser
+from sftp_filebrowserclass import FileBrowser
+from sftp_editwindowclass import EditDialogContainer
+from sftp_downloadworkerclass import sftp_queue, response_queues
 
-from sftp_downloadworkerclass import sftp_queue
- 
 MAX_HOST_DATA_SIZE = 10  # Set your desired maximum size
 
 class SFTPJob:
@@ -43,9 +47,6 @@ class SFTPJob:
         data["password"] = base64.b64decode(data["password"]).decode()  # Decode password
         return SFTPJob(**data)
 
-response_queues = {}
-sftp_current_creds = {}
-
 class CustomComboBox(QComboBox):
     editingFinished = pyqtSignal()
 
@@ -56,6 +57,13 @@ class CustomComboBox(QComboBox):
     def focusOutEvent(self, event):
         super().focusOutEvent(event)
         self.editingFinished.emit()
+
+# Function to retrieve credentials based on session_id
+def get_credentials(session_id):
+    try:
+        return sftp_current_creds[session_id]
+    except KeyError:
+        return None  # Return None or handle the error as per your application's logic
 
 def create_random_integer():
     """
@@ -117,7 +125,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         super().__init__()
         self.transfers_message = transferSignals()
         # Custom data structure to store hostname, username, and password together
-
+        self.create_initial_data()
         self.host_data = {
             "hostnames" : {},
             "usernames" : {},
@@ -132,7 +140,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
 
     def init_ui(self):
         # Initialize input widgets
-        self.create_initial_data()
         self.container_layout = QVBoxLayout()
         self.username = QLineEdit()
         self.password = QLineEdit()
@@ -220,7 +227,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         self.hostname_combo.activated.connect(self.hostname_changed)
         self.hostname_combo.editingFinished.connect(self.hostname_changed)        
 
-    def prepare_container_widget(self, use_terminal=False):
+    def prepare_container_widget(self):
         # was in the middle of adding some code for ssh terminal windows and decided to ... not do that
         # outside the scope of a quick and dirty sftp application
         # Create a container widget
@@ -229,6 +236,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         # Create a layout for the browsers
         browser_layout = QHBoxLayout()
         
+        print("prepare container widget-left browser open")
         browser_layout.addWidget(self.left_browser)
         browser_layout.addWidget(self.right_browser)
 
@@ -251,19 +259,48 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         # Delete the widget if necessary
         widget_to_remove.deleteLater()
 
+    def setup_left_browser(self, session_id):
+        global sftp_current_creds
+
+        self.session_id = session_id
+
+        sftp_current_creds[self.session_id]['current_local_directory'] = os.getcwd()
+        try:
+            print("setup_left_browser try create filebrowser")
+            self.left_browser = FileBrowser("Local Files", self.session_id)
+            ic(self.left_browser)
+            self.left_browser.table.setFocusPolicy(Qt.StrongFocus)
+            self.left_browser.message_signal.connect(self.update_console)
+            self.container_layout.addWidget(self.left_browser)
+
+        except Exception as e:
+            print("error creating left tab")
+            print(e)
+            pass
+
+    def setup_right_browser(self, session_id):
+        self.session_id = session_id
+        try:
+            self.right_browser = RemoteFileBrowser(title=self.title, session_id=self.session_id)
+            self.right_browser.table.setFocusPolicy(Qt.StrongFocus)
+            self.right_browser.message_signal.connect(self.update_console)
+
+        except Exception as e:
+            pass
+
     def YouAddTab(self, session_id, widget):
         self.session_id = session_id
 
         # Assuming these methods are correctly defined and handle their tasks appropriately
         self.title = self.get_session_title(self.session_id)
         
-        if not self.use_terminal:
-            self.setup_left_browser( self.session_id )
-            self.setup_right_browser( self.session_id )
-            self.setup_output_console()
+        print("call setup_left_browser")
+        self.setup_left_browser( self.session_id )
+        self.setup_right_browser( self.session_id )
+        self.setup_output_console()
 
         # Prepare the container widget
-        container_widget = self.prepare_container_widget(self.use_terminal)
+        container_widget = self.prepare_container_widget()
 
         # Add widget to the tab widget with the title
         # Add the container widget as a new tab
@@ -280,6 +317,8 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         self.sessions.append(self.tab_widget)
 
     def get_session_title(self, session_id):
+        global sftp_current_creds
+
         self.session_id = session_id
 
         try:
@@ -293,29 +332,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         self.output_console = QTextEdit()
         self.output_console.setReadOnly(True)
         self.container_layout.addWidget(self.output_console)
-
-    def setup_left_browser(self, session_id):
-        self.session_id = session_id
-
-        sftp_current_creds[self.session_id]['current_local_directory'] = os.getcwd()
-        try:
-            self.left_browser = FileBrowser("Local Files", self.session_id)
-            self.left_browser.table.setFocusPolicy(Qt.StrongFocus)
-            self.left_browser.message_signal.connect(self.update_console)
-            self.container_layout.addWidget(self.left_browser)
-
-        except Exception as e:
-            pass
-
-    def setup_right_browser(self, session_id):
-        self.session_id = session_id
-        try:
-            self.right_browser = RemoteFileBrowser(title=self.title, session_id=self.session_id)
-            self.right_browser.table.setFocusPolicy(Qt.StrongFocus)
-            self.right_browser.message_signal.connect(self.update_console)
-
-        except Exception as e:
-            pass
 
     def log_connection_success(self):
         success_message = "Connected successfully"
@@ -339,6 +355,8 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
             self.port_selector.clear()
 
     def removeTab(self, session_id):
+        global sftp_current_creds
+
         self.tabWidget.removeTab( self.tabs[session_id] )
         del self.tabs[session_id]  # Remove the reference from the list
         del sftp_current_creds[self.session_id]
@@ -413,6 +431,8 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         self.connect()
 
     def connect(self, hostname="localhost", username="guest", password="guest", port="22"):
+        global sftp_current_creds
+
         self.session_id = create_random_integer()
 
         if hostname == "localhost":
@@ -449,7 +469,8 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
             'password' : self.temp_password,
             'port' : self.temp_port, }
 
-        self.YouAddTab(self.session_id, self.container_widget, self.use_terminal)
+        ic(sftp_current_creds)
+        self.YouAddTab(self.session_id, self.container_widget)
 
         return self.session_id
 

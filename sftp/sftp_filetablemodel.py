@@ -3,10 +3,11 @@ from PyQt5.QtCore import QVariant,QAbstractTableModel,QModelIndex,Qt
 class FileTableModel(QAbstractTableModel):
     def __init__(self, session_id):
         super().__init__()
-        global sftp_current_creds
         self.file_list = []
         self.session_id = session_id
         # Convert string to Path object if necessary
+        global sftp_current_creds
+        
         sftp_current_creds[self.session_id]['current_local_directory'] = os.getcwd()
         self.directory = Path(sftp_current_creds[self.session_id]['current_local_directory'])
         self.column_names = ['Name', 'Size', 'Permissions', 'Modified']
@@ -17,6 +18,8 @@ class FileTableModel(QAbstractTableModel):
         return False
 
     def get_files(self):
+        global sftp_current_creds
+
         ic("FileTableModel get files")
         self.directory = Path(sftp_current_creds[self.session_id]['current_local_directory'])
 

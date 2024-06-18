@@ -1,20 +1,28 @@
 from sftp_browserclass import Browser
+from sftp_filetablemodel import FileTableModel
 from PyQt5.QtWidgets import QMessageBox, QHeaderView
 from PyQt5.QtCore import Qt
 
 class FileBrowser(Browser):
     def __init__(self, title, session_id, parent=None):
         super().__init__(title, session_id, parent)  # Initialize the FileBrowser parent class
+        print("filebrowser object init begin")
         self.model = FileTableModel(self.session_id)
+        print("filebrowser object init setmodel")
         self.table.setModel(self.model)
 
         # Set horizontal scroll bar policy for the entire table
+        print("filebrowser set scroll policy horizontal")
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
 
         # Resize the first column based on its contents
+        print("filebrowser horizontal header resize")
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        print("filebrowser object init complete")
 
     def remove_directory_with_prompt(self, local_path=None):
+        global sftp_current_creds
+        
         # for removing LOCAL directories
         if local_path == None or local_path == False:
             current_browser = self.focusWidget()

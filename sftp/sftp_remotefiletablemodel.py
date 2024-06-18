@@ -94,6 +94,7 @@ class RemoteFileTableModel(QAbstractTableModel):
         self.layoutChanged.emit()
 
     def get_files(self):
+        global sftp_current_creds
         """
         Fetches file attributes from the specified path using the given SFTP connection.
         :param sftp: Paramiko SFTP client object
@@ -152,6 +153,8 @@ class RemoteFileTableModel(QAbstractTableModel):
         loop.exec_()
 
     def sftp_listdir_attr(self, remote_path):
+        global sftp_current_creds
+        
         job_id = create_random_integer()
         response_queues[job_id] = queue.Queue()
 

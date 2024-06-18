@@ -3,6 +3,7 @@ from PyQt5.QtCore import QThreadPool, QRunnable, QTimer
 import enum
 import queue
 
+response_queues = {}
 sftp_queue = queue.Queue()
 
 class SIZE_UNIT(enum.Enum):
