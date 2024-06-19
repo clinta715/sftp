@@ -1,19 +1,27 @@
+import os
+from icecream import ic
+
 sftp_current_creds = {}
 
 # Function to retrieve credentials based on session_id
 def get_credentials(session_id):
     try:
-        return sftp_current_creds[session_id]
+        ic("get credentials")
+        ic(session_id)
+        ic(sftp_current_creds[session_id])
+        return sftp_current_creds.get(session_id, None)
     except KeyError:
         return None  # Return None or handle the error as per your application's logic
 
-# Function to retrieve credentials based on session_id
+# Function to set credentials based on session_id
 def set_credentials(session_id, credential, value):
-    try:
-        return sftp_current_creds[session_id]
-    except KeyError:
-        return None  # Return None or handle the error as per your application's logic
+    if session_id not in sftp_current_creds:
+        sftp_current_creds[session_id] = {}  # Initialize dictionary for new session_id
+    ic("set credentials")
+    sftp_current_creds[session_id][credential] = value
+    ic(sftp_current_creds[session_id][credential])
 
+# Function to delete credentials based on session_id
 def del_credentials(session_id):
     try:
         del sftp_current_creds[session_id]

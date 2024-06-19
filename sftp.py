@@ -5,46 +5,14 @@ from icecream import ic
 from PyQt5.QtWidgets import QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QTextEdit, QCompleter, QComboBox, QSpinBox,QTabWidget
 from PyQt5.QtCore import pyqtSignal, QObject, QCoreApplication, Qt
 
-from sftp_downloadworkerclass import BackgroundThreadWindow
+from sftp_downloadworkerclass import transferSignals, add_sftp_job, sftp_queue_clear
+from sftp_backgroundthreadwindow import BackgroundThreadWindow
 from sftp_editwindowclass import EditDialogContainer
-from sftp_downloadworkerclass import sftp_queue
 from sftp_remotefilebrowserclass import RemoteFileBrowser
 from sftp_filebrowserclass import FileBrowser
 from sftp_creds import get_credentials, set_credentials, del_credentials, create_random_integer
 
 MAX_HOST_DATA_SIZE = 10  # Set your desired maximum size
-
-class SFTPJob:
-    def __init__(self, source_path, is_source_remote, destination_path, is_destination_remote, hostname, username, password, port, command, id ):
-        self.source_path = source_path
-        self.is_source_remote = is_source_remote
-        self.destination_path = destination_path
-        self.is_destination_remote = is_destination_remote
-        self.hostname = hostname
-        self.username = username
-        self.password = password
-        self.port = port
-        self.command = command
-        self.id = id
-
-    def to_dict(self):
-        return {
-            "source_path": self.source_path,
-            "is_source_remote": self.is_source_remote,
-            "destination_path": self.destination_path,
-            "is_destination_remote": self.is_destination_remote,
-            "hostname": self.hostname,
-            "username": self.username,
-            "password": base64.b64encode(self.password.encode()).decode(),  # Encode password
-            "port": self.port,
-            "command": self.command,
-            "id": self.id
-        }
-
-    @staticmethod
-    def from_dict(data):
-        data["password"] = base64.b64decode(data["password"]).decode()  # Decode password
-        return SFTPJob(**data)
 
 class CustomComboBox(QComboBox):
     editingFinished = pyqtSignal()
@@ -57,26 +25,8 @@ class CustomComboBox(QComboBox):
         super().focusOutEvent(event)
         self.editingFinished.emit()
 
-def add_sftp_job(source_path, is_source_remote, destination_path, is_destination_remote, hostname, username, password, port, command, id ):
-    job = SFTPJob(
-        source_path, is_source_remote, destination_path, is_destination_remote,
-        hostname, username, password, port, command, id )
-    sftp_queue.put(job)
-
-class WorkerSignals(QObject):
-    progress = pyqtSignal(int, int)
-    finished = pyqtSignal(int)
-    message = pyqtSignal(int, str)
-
 # Define SIZE_UNIT and WorkerSignals as necessary
 MAX_TRANSFERS = 4
-
-class QueueItem:
-    def __init__(self, name, id):
-        self.name = name
-        self.id = id
-
-queue_display = []
 
 class MainWindow(QMainWindow):  # Inherits from QMainWindow
     def __init__(self):
@@ -219,11 +169,11 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
 
     def setup_left_browser(self, session_id):
         self.session_id = session_id
-        creds = get_credentials(self.session_id)
-
+        # creds = get_credentials(self.session_id)
         set_credentials(self.session_id, 'current_local_directory', os.getcwd())
+
         try:
-            # print("setup_left_browser try create filebrowser")
+            ic("setup_left_browser try create filebrowser")
             self.left_browser = FileBrowser("Local Files", self.session_id)
             # ic(self.left_browser)
             self.left_browser.table.setFocusPolicy(Qt.StrongFocus)
@@ -231,8 +181,8 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
             self.container_layout.addWidget(self.left_browser)
 
         except Exception as e:
-            # print("error creating left tab")
-            # print(e)
+            ic("error creating left tab")
+            ic(e)
             pass
 
     def setup_right_browser(self, session_id):
@@ -371,7 +321,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
             pass  # Queue is empty, break the loop
 
     def clear_queue_clicked(self):
-        self.clear_queue(sftp_queue)
+        sftp_queue_clear()
         self.output_console.append("queue cleared")
 
     def transfers_button_clicked(self):
@@ -387,7 +337,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
 
     def connect(self, hostname="localhost", username="guest", password="guest", port="22"):
         self.session_id = create_random_integer()
-        creds = get_credentials( self.session_id )
 
         if hostname == "localhost":
             if self.hostname_combo.currentText():
@@ -395,11 +344,21 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         else:
             self.temp_hostname = hostname
 
+        ic("set_credentials")
+        ic(self.session_id)
+        ic(self.temp_hostname)
+        set_credentials( self.session_id, 'hostname', self.temp_hostname)
+
         if username == "guest":
             if self.username.text():
                 self.temp_username = self.username.text()
         else:
             self.temp_username = username
+
+        ic("set_credentials")
+        ic(self.session_id)
+        ic(self.temp_username)
+        set_credentials( self.session_id, 'username', self.temp_username)
 
         if password == "guest":
             if self.password.text():
@@ -407,20 +366,29 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         else:
             self.temp_password = password
 
+        ic("set_credentials")
+        ic(self.session_id)
+        ic(self.temp_password)
+        set_credentials( self.session_id, 'password', self.temp_password)
+
         if self.port_selector.text():
             self.temp_port = self.port_selector.text()
         else:
             self.temp_port = port
 
+        ic("set_credentials")
+        ic(self.session_id)
+        ic(self.temp_port)
+        set_credentials( self.session_id, 'port', self.temp_port)
+        set_credentials( self.session_id, 'current_local_directory', os.getcwd())
+        # this either needs to be set to . or we need to sftp_getcwd it.... can't remember
+        set_credentials( self.session_id, 'current_remote_directory', '.')
+
+        creds = get_credentials(self.session_id)
+        ic(creds)
+
         # Create a new QWidget as a container for both the file table and the output console
         self.container_widget = QWidget()
-
-        set_credentials( self.session_id, 'current_local_directory', '.')
-        set_credentials( self.session_id, 'current_remote_directory', '.')
-        set_credentials( self.session_id, 'hostname', self.temp_hostname)
-        set_credentials( self.session_id, 'username', self.temp_username)
-        set_credentials( self.session_id, 'password', self.temp_password)
-        set_credentials( self.session_id, 'port', self.temp_port)
 
         self.YouAddTab(self.session_id, self.container_widget)
 

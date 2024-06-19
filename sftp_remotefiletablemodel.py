@@ -1,6 +1,10 @@
 from PyQt5.QtCore import QVariant,QAbstractTableModel,QModelIndex,QTimer, QDateTime, Qt, QEventLoop
+import base64
+import queue
+from icecream import ic
 
-from sftp_creds import get_credentials 
+from sftp_creds import get_credentials, create_random_integer
+from sftp_downloadworkerclass import create_response_queue, delete_response_queue, add_sftp_job
 
 class RemoteFileTableModel(QAbstractTableModel):
     def __init__(self, session_id, parent=None):
@@ -8,6 +12,7 @@ class RemoteFileTableModel(QAbstractTableModel):
         self.session_id = session_id
         self.file_list = []  # Initialize as an empty list
         self.column_names = ['Name', 'Size', 'Permissions', 'Modified']
+        # ic("remote file table model init")
         self.get_files()
 
     def is_remote_browser(self):
@@ -96,7 +101,9 @@ class RemoteFileTableModel(QAbstractTableModel):
         self.layoutChanged.emit()
 
     def get_files(self):
+        # ic("remote file table model get files")
         creds = get_credentials(self.session_id)
+        ic(creds)
         """
         Fetches file attributes from the specified path using the given SFTP connection.
         :param sftp: Paramiko SFTP client object
@@ -104,6 +111,7 @@ class RemoteFileTableModel(QAbstractTableModel):
         """
         # List all files and directories in the specified path
         items = self.sftp_listdir_attr(creds.get('current_remote_directory'))
+        ic(items)
         # Clear the existing file list
         # Inform the view that the model is about to be reset
         self.beginResetModel()
@@ -113,6 +121,7 @@ class RemoteFileTableModel(QAbstractTableModel):
         # Assuming that size, permissions, and modified_time for '..' are not relevant, set them to default values
         self.file_list.append(("..", 0, "----", "----"))
 
+        # ic("remote file table model get files 2")
         for item in items:
             # Get file name
             try:
@@ -141,12 +150,14 @@ class RemoteFileTableModel(QAbstractTableModel):
             # Append the file information to the list
             self.file_list.append((name, size, permissions, modified_time))
 
+        # ic("remote file table model 3")
         # Emit dataChanged for the entire range of data
         top_left = self.createIndex(0, 0)  # Top left cell of the table
         bottom_right = self.createIndex(self.rowCount() - 1, self.columnCount() - 1)  # Bottom right cell
         self.dataChanged.emit(top_left, bottom_right)
         self.endResetModel()
         self.layoutChanged.emit()
+        # ic("remote file table get files complete")
 
     def non_blocking_sleep(self, ms):
         # sleep function that shouldn't block any other threads
@@ -156,29 +167,38 @@ class RemoteFileTableModel(QAbstractTableModel):
 
     def sftp_listdir_attr(self, remote_path):
         creds = get_credentials(self.session_id)
-        
         job_id = create_random_integer()
-        response_queues[job_id] = queue.Queue()
+        queue = create_response_queue( job_id )
 
+        ic(remote_path)
+        # ic("remotefiletablemodel listdirattr")
         # the slashes/backslashes stuff is an attempt at windows compatibility
-        add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "listdir_attr", job_id )
+        try:
+            add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "listdir_attr", job_id )
+        except Exception as e:
+            ic(e)
 
-        while response_queues[job_id].empty():
+        # ic("remotefiletablemodel listdirattr 2")
+
+        while queue.empty():
             self.non_blocking_sleep(100)  # Sleeps for 1000 milliseconds (1 second)
 
-        response = response_queues[job_id].get_nowait()
+        response = queue.get_nowait()
+
+        # ic("remotefiletablemodel listdirattr 3")
 
         if response == "error":
-            error = response_queues[job_id].get_nowait()
+            error = queue.get_nowait()
             diag = f"RemoteFileTableModel sftp_listdir_attr() {error}"
             # always 2 responses on stack, if its an error, get message
             f = False
         else:
             # if its not an error its a success and heres the list
-            list = response_queues[job_id].get_nowait()
+            list = queue.get_nowait()
             f = True
 
-        del response_queues[job_id]
+        delete_response_queue(job_id)
+        ic("remotefiletablemodel listdirattr ends")
         if f:
             return list
         else:

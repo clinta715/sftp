@@ -1,20 +1,31 @@
 from sftp_filebrowserclass import FileBrowser
 from PyQt5.QtWidgets import QTableView, QFileDialog, QMessageBox, QInputDialog, QHeaderView
 from PyQt5.QtCore import Qt
+from icecream import ic
+import os
+import stat
 
 from sftp_remotefiletablemodel import RemoteFileTableModel
-from sftp_creds import get_credentials, create_random_integer
+from sftp_creds import get_credentials, create_random_integer, set_credentials, create_random_integer
+from sftp_downloadworkerclass import create_response_queue, delete_response_queue, add_sftp_job, QueueItem
+from sftp_backgroundthreadwindow import queue_display_append
 
 class RemoteFileBrowser(FileBrowser):
     def __init__(self, title, session_id, parent=None):
         super().__init__(title, session_id, parent)  # Initialize the FileBrowser parent class
+        # ic("init remote file browser")
         self.model = RemoteFileTableModel(self.session_id)
+
+        # ic("init model complete")
         self.table.setModel(self.model)
         # Set horizontal scroll bar policy for the entire table
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
 
         # Resize the first column based on its contents
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        ic("init set current remote dir")
+
+        set_credentials(self.session_id, 'current_remote_directory', self.sftp_getcwd())
 
     def is_remote_browser(self):
         return True
@@ -39,32 +50,39 @@ class RemoteFileBrowser(FileBrowser):
     def sftp_getcwd(self):
         creds = get_credentials(self.session_id)
         job_id = create_random_integer()
-        response_queues[job_id] = queue.Queue()
+        queue = create_response_queue( job_id )
 
-        add_sftp_job(creds.get('current_remote_directory'), True, ".", True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "getcwd", job_id)
+        ic("sftp_getcwd")
+        ic(creds)
 
-        self.waitjob(job_id)
-        response = response_queues[job_id].get_nowait()
+        try:
+            add_sftp_job(creds.get('current_remote_directory'), True, ".", True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "getcwd", job_id)
+        except Exception as e:
+            ic(e)
+
+        ic("waiting")
+        while queue.empty():
+            self.non_blocking_sleep(100)  # Sleeps for 1000 milliseconds (1 second)
+        response = queue.get_nowait()
+        ic("response")
 
         if response == "error":
-            response = response_queues[job_id].get_nowait()
+            response = queue.get_nowait()
             ic(response)
             new_path = None
         else:
             # if success, set our new remote working path to the newly created path path that we path'd pathily'
-            new_path = response_queues[job_id].get_nowait()
+            new_path = queue.get_nowait()
 
-        del response_queues[job_id]
+        delete_response_queue(job_id)
+        ic(new_path)
         return new_path
 
     def change_directory(self, path ):
         creds = get_credentials(self.session_id)
-
         job_id = create_random_integer()
-        response_queues[job_id] = queue.Queue()
-        if creds.get('current_remote_directory') == ".":
-            set_credentials(self.session_id, 'current_remote_directory', self.sftp_getcwd())
-
+        queue = create_response_queue( job_id )
+        
         try:
             # Remote file browser
             if path == "..":
@@ -78,14 +96,14 @@ class RemoteFileBrowser(FileBrowser):
             add_sftp_job(new_path.replace("\\", "/"), True, new_path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "chdir", job_id)
 
             self.progressBar.setRange(0, 0)
-            while response_queues[job_id].empty():
+            while queue.empty():
                 self.non_blocking_sleep(100)  # Sleeps for 1000 milliseconds (1 second)
-            response = response_queues[job_id].get_nowait()
+            response = queue.get_nowait()
             self.progressBar.setRange(0, 100)
 
             if response == "error":
-                response = response_queues[job_id].get_nowait()
-                ic(response)
+                response = queue.get_nowait()
+                # ic(response)
                 raise response
             else:
                 # if success, set our new remote working path to the newly created path path that we path'd pathily'
@@ -101,7 +119,7 @@ class RemoteFileBrowser(FileBrowser):
             f = False
 
         finally:
-            del response_queues[job_id]
+            delete_response_queue(job_id)
             return f
 
     def double_click_handler(self, index):
@@ -117,17 +135,20 @@ class RemoteFileBrowser(FileBrowser):
                     # ic("RemoteFileBrowser double_click_handler temp_path != ..")
                     path = os.path.join( creds.get('current_remote_directory'), temp_path )
                     if self.is_remote_directory(temp_path):
+                        ic("doubleclickhandler change directory?")
                         self.change_directory(path.replace("\\", "/"))
                     elif self.is_remote_file(temp_path):
-                        # ic("RemoteFileBrowser double_click_handler is_remote_file()")
+                        ic("RemoteFileBrowser double_click_handler is_remote_file()")
                         local_path = QFileDialog.getSaveFileName(self, "Save File", os.path.basename(temp_path))[0]
                         if local_path:
                             # Assuming upload_download is a method to handle the download
+                            ic("doubleclickhandler uploaddownload")
                             self.upload_download(local_path)
                             # Emit a signal or log the download
                             self.message_signal.emit(f"Downloaded file: {path} to {local_path}")
                 if temp_path == "..":
-                    # ic("RemoteFileBrowser double_click_handler temp_path == ..")
+                    ic("RemoteFileBrowser double_click_handler temp_path == ..")
+                    ic("doubleclickhandler go up a dir")
                     self.change_directory(temp_path)
 
                 return True
@@ -213,7 +234,9 @@ class RemoteFileBrowser(FileBrowser):
 
     def upload_download(self):
         creds = get_credentials(self.session_id)
-
+        if creds.get('current_remote_directory') == '.':
+            set_credentials( self.session_id, 'current_remote_directory', self.sftp_getcwd())
+            creds = get_credentials(self.session_id)
         current_browser = self.focusWidget()
 
         if current_browser is not None and isinstance(current_browser, QTableView):
@@ -229,18 +252,23 @@ class RemoteFileBrowser(FileBrowser):
                         entry_path = os.path.join( creds.get('current_remote_directory'), os.path.basename(selected_path))
                         local_path = os.path.join( os.getcwd(), os.path.basename(selected_path))
 
+                        ic("remotefilebrowser uploaddownload is remote directory")
                         if self.is_remote_directory(entry_path):
                             # Download directory
+                            ic("    yes remote directory")
                             self.download_directory(entry_path, local_path)
                         else:
                             # Download file
+                            ic("    no remote file")
                             job_id = create_random_integer()
                             queue_item = QueueItem(entry_path, job_id)
-                            queue_display.append(queue_item)
-
+                            queue_display_append(queue_item)
+                            ic("adding remote file to download job queue")
+                            ic(job_id)
                             add_sftp_job(entry_path, True, local_path, False, self.init_hostname, self.init_username, self.init_password, self.init_port, "download", job_id)
                     except Exception as e:
                         self.message_signal.emit(f"upload_download() {e}")
+                        ic(e)
             else:
                 self.message_signal.emit("No item selected or invalid index.")
         else:
@@ -315,10 +343,11 @@ class RemoteFileBrowser(FileBrowser):
                     job_id = create_random_integer()
 
                     queue_item = QueueItem( os.path.basename(entry_path), job_id )
-                    queue_display.append(queue_item)
-
+                    queue_display_append(queue_item)
+                    ic("add_sftp_job")
+                    ic(job_id)
                     add_sftp_job(entry_path.replace("\\", "/"), True, local_entry_path, False, self.init_hostname, self.init_username, self.init_password, self.init_port, "download", job_id)
 
         except Exception as e:
             self.message_signal.emit(f"download_directory() {e}")
-            # ic(e)
+            ic(e)

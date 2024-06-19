@@ -11,7 +11,12 @@ from sftp_creds import get_credentials
 class FileBrowser(Browser):
     def __init__(self, title, session_id, parent=None):
         super().__init__(title, session_id, parent)  # Initialize the FileBrowser parent class
-        self.model = FileTableModel(self.session_id)
+        # ic("init file browser class object")
+        try:
+            self.model = FileTableModel(session_id)
+        except Exception as e:
+            ic(e)
+
         self.table.setModel(self.model)
 
         # Set horizontal scroll bar policy for the entire table
@@ -19,6 +24,7 @@ class FileBrowser(Browser):
 
         # Resize the first column based on its contents
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        # ic("file browser init completed")
 
     def remove_directory_with_prompt(self, local_path=None):
         creds = get_credentials( self.session_id )
