@@ -5,6 +5,7 @@ import queue
 from icecream import ic
 import paramiko
 import os
+import queue
 
 from sftp import WorkerSignals, pyqtSignal
 
@@ -31,6 +32,13 @@ class Transfer:
 
 class transferSignals(QObject):
     showhide = pyqtSignal()
+
+def delete_response_queue(job_id):
+    if job_id in response_queues:
+        del response_queues[job_id]
+        # print(f"Deleted queue for job_id '{job_id}'")
+    else:
+        # print(f"No queue found for job_id '{job_id}'")
 
 def create_response_queue(job_id):
     # Create a new queue

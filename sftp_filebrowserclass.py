@@ -2,6 +2,9 @@ from sftp_browserclass import Browser
 from sftp_filetablemodel import FileTableModel
 from PyQt5.QtWidgets import QMessageBox, QHeaderView
 from PyQt5.QtCore import Qt
+import os 
+import shutil
+from icecream import ic
 
 from sftp_creds import get_credentials
 

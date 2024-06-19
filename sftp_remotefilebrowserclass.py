@@ -2,7 +2,8 @@ from sftp_filebrowserclass import FileBrowser
 from PyQt5.QtWidgets import QTableView, QFileDialog, QMessageBox, QInputDialog, QHeaderView
 from PyQt5.QtCore import Qt
 
-from sftp_creds import get_credentials
+from sftp_remotefiletablemodel import RemoteFileTableModel
+from sftp_creds import get_credentials, create_random_integer
 
 class RemoteFileBrowser(FileBrowser):
     def __init__(self, title, session_id, parent=None):

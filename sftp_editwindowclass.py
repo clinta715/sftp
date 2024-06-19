@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QPushButton, QMenu, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QSizePolicy, QDialog, QStyledItemDelegate
 from PyQt5.QtCore import pyqtSignal, Qt
+import base64
 
 class PasswordDelegate(QStyledItemDelegate):
     def createEditor(self, parent, option, index):
@@ -57,7 +58,7 @@ class EditDialog(QDialog):
         try:
             self.load_data_from_file("sftp.json")
         except:
-            ic("can't load sftp.json")
+            # ic("can't load sftp.json")
             self.host_data = {
                 'localhost': {
                     'username': 'guest',
@@ -179,33 +180,16 @@ class EditDialog(QDialog):
             self.table.removeRow(row_count - 1)
 
     def load_data_from_file(self, filename="sftp.json"):
-        try:
-            with open(filename, "r") as file:
-                data_loaded = json.load(file)
-
-            # Decode the Base64-encoded passwords
-            self.host_data = {}
-            for hostname, details in data_loaded.items():
-                decoded_password = base64.b64decode(details['password']).decode()
-                self.host_data[hostname] = {
-                    'username': details['username'],
-                    'password': decoded_password,
-                    'port': details['port']
-                }
-
-        except:
-            # revised the logic here so basiacally any error on reading the sftp.json file results in resetting it to example data
-            # executive decision was made that to do so was outside the scope of a 'quick and dirty' sftp application and would begin to approach 'time consuming and elegant'
-            # Create initial data
-            self.host_data = {
-                'localhost': {
-                    'username': 'guest',
-                    'password': base64.b64encode('guest'.encode()).decode(),
-                    'port': 22
-                }
+        self.host_data = {
+            'localhost': {
+            'username': 'guest',
+            'password': base64.b64encode('guest'.encode()).decode(),
+            'port': 22
             }
-            # Save the initial data to the file
-            self.save_data()
+        }
+            
+        # Save the initial data to the file
+        self.save_data()
 
     def save_data(self):
         # Takes data out of the table and puts it in self.host_data while removing duplicates

@@ -1,5 +1,9 @@
 from PyQt5.QtCore import QVariant,QAbstractTableModel,QModelIndex,Qt
 from pathlib import Path
+import os
+import datetime
+
+from sftp_remotefiletablemodel import RemoteFileTableModel
 from sftp_creds import get_credentials, set_credentials
 
 class FileTableModel(QAbstractTableModel):

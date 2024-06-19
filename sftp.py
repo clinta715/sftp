@@ -10,7 +10,7 @@ from sftp_editwindowclass import EditDialogContainer
 from sftp_downloadworkerclass import sftp_queue
 from sftp_remotefilebrowserclass import RemoteFileBrowser
 from sftp_filebrowserclass import FileBrowser
-from sftp_creds import get_credentials, set_credentials, del_credentials
+from sftp_creds import get_credentials, set_credentials, del_credentials, create_random_integer
 
 MAX_HOST_DATA_SIZE = 10  # Set your desired maximum size
 
@@ -57,27 +57,6 @@ class CustomComboBox(QComboBox):
         super().focusOutEvent(event)
         self.editingFinished.emit()
 
-def create_random_integer():
-    """
-    Generates a really random positive integer using os.urandom.
-    Ensures that the number is not interpreted as negative. Keeps track of generated numbers to ensure uniqueness.
-    """
-    # Initialize the set of generated numbers as a function attribute if it doesn't exist
-    if not hasattr(create_random_integer, 'generated_numbers'):
-        create_random_integer.generated_numbers = set()
-
-    while True:
-        # Generating a random byte string of length 4
-        random_bytes = os.urandom(4)
-
-        # Converting to a positive integer and masking the most significant bit
-        random_integer = int.from_bytes(random_bytes, 'big') & 0x7FFFFFFF
-
-        # Check if the number is unique
-        if random_integer not in create_random_integer.generated_numbers:
-            create_random_integer.generated_numbers.add(random_integer)
-            return random_integer
-
 def add_sftp_job(source_path, is_source_remote, destination_path, is_destination_remote, hostname, username, password, port, command, id ):
     job = SFTPJob(
         source_path, is_source_remote, destination_path, is_destination_remote,
@@ -98,19 +77,6 @@ class QueueItem:
         self.id = id
 
 queue_display = []
-
-class Transfer:
-    def __init__(self, transfer_id, progress_bar=None, cancel_button=None, download_worker=None, active=False, hbox=None, tbox=None ):
-        self.transfer_id = transfer_id
-        self.progress_bar = progress_bar
-        self.cancel_button = cancel_button
-        self.download_worker = download_worker
-        self.active = active
-        self.hbox = hbox
-        self.tbox = tbox
-
-class transferSignals(QObject):
-    showhide = pyqtSignal()
 
 class MainWindow(QMainWindow):  # Inherits from QMainWindow
     def __init__(self):
@@ -265,8 +231,8 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
             self.container_layout.addWidget(self.left_browser)
 
         except Exception as e:
-            print("error creating left tab")
-            print(e)
+            # print("error creating left tab")
+            # print(e)
             pass
 
     def setup_right_browser(self, session_id):
