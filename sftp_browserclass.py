@@ -93,28 +93,6 @@ class Browser(QWidget):
 
         return head, tail
 
-    def waitjob(self, job_id):
-        # Initialize the progress bar
-        self.progressBar.setRange(0, 100)
-        self.progressBar.setValue(0)
-
-        progress_value = 0
-        while queue.empty():
-            # Increment progress by 10%, up to 100%
-            progress_value = min(progress_value + 10, 100)
-            self.progressBar.setValue(progress_value)
-
-            # Sleep and process events to keep UI responsive
-            self.non_blocking_sleep(100)
-            QApplication.processEvents()  # Process any pending GUI events
-
-        # Reset the progress bar after completion
-        self.progressBar.setValue(100)
-        self.progressBar.setRange(0, 100)
-
-        # Return after the job is done
-        return
-
     def sftp_mkdir(self, remote_path):
         creds = get_credentials(self.session_id)
         job_id = create_random_integer()
@@ -122,7 +100,8 @@ class Browser(QWidget):
 
         add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "mkdir", job_id )
 
-        self.waitjob(job_id)
+        while queue.empty():
+            self.non_blocking_sleep(100)
 
         response = queue.get_nowait()
 
@@ -145,7 +124,8 @@ class Browser(QWidget):
 
         add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "rmdir", job_id )
 
-        self.waitjob(job_id)
+        while queue.empty():
+            self.non_blocking_sleep(100)
         response = queue.get_nowait()
 
         if response == "error":
@@ -166,7 +146,8 @@ class Browser(QWidget):
 
         add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "remove", job_id )
 
-        self.waitjob(job_id)
+        while queue.empty():
+            self.non_blocking_sleep(100)
         response = queue.get_nowait()
 
         if response == "error":
@@ -224,7 +205,8 @@ class Browser(QWidget):
 
         add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "listdir_attr", job_id )
 
-        self.waitjob(job_id)
+        while queue.empty():
+            self.non_blocking_sleep(100)
         response = queue.get_nowait()
 
         if response == "error":
@@ -261,7 +243,8 @@ class Browser(QWidget):
         try:
             add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "stat", job_id )
 
-            self.waitjob(job_id)
+            while queue.empty():
+                self.non_blocking_sleep(100)
             response = queue.get_nowait()
 
             if not response == "error":
@@ -298,7 +281,8 @@ class Browser(QWidget):
             # ic("add job")
             add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "stat", job_id )
 
-            self.waitjob(job_id)
+            while queue.empty():
+                self.non_blocking_sleep(100)
             response = queue.get_nowait()
             # ic(response)
 
@@ -563,7 +547,8 @@ class Browser(QWidget):
         try:
             add_sftp_job(path.replace("\\", "/"), True, path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "stat", job_id )
 
-            self.waitjob(job_id)
+            while queue.empty():
+                self.non_blocking_sleep(100)
             response = queue.get_nowait()
 
             if response == "error":

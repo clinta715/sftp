@@ -173,7 +173,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         set_credentials(self.session_id, 'current_local_directory', os.getcwd())
 
         try:
-            ic("setup_left_browser try create filebrowser")
+            # ic("setup_left_browser try create filebrowser")
             self.left_browser = FileBrowser("Local Files", self.session_id)
             # ic(self.left_browser)
             self.left_browser.table.setFocusPolicy(Qt.StrongFocus)
@@ -181,7 +181,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
             self.container_layout.addWidget(self.left_browser)
 
         except Exception as e:
-            ic("error creating left tab")
+            # ic("error creating left tab")
             ic(e)
             pass
 
@@ -412,6 +412,8 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         add_sftp_job(".", False, ".", False, "localhost", "guest", "guest", 69, "end", 69)
 
 def main():
+    ic.disable()
+
     def hide_transfers_window():
         if not hasattr(hide_transfers_window, "transfers_hidden"):
             hide_transfers_window.transfers_hidden = 1  # Initialize it once
