@@ -184,7 +184,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
             self.container_layout.addWidget(self.left_browser)
 
         except Exception as e:
-            # ic("error creating left tab")
             ic(e)
             pass
 

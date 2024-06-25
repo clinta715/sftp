@@ -170,22 +170,18 @@ class RemoteFileTableModel(QAbstractTableModel):
         job_id = create_random_integer()
         queue = create_response_queue( job_id )
 
+        ic()
         ic(remote_path)
-        # ic("remotefiletablemodel listdirattr")
         # the slashes/backslashes stuff is an attempt at windows compatibility
         try:
-            add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "listdir_attr", job_id )
+            add_sftp_job(remote_path, True, remote_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "listdir_attr", job_id )
         except Exception as e:
             ic(e)
-
-        # ic("remotefiletablemodel listdirattr 2")
 
         while queue.empty():
             self.non_blocking_sleep(100)  # Sleeps for 1000 milliseconds (1 second)
 
         response = queue.get_nowait()
-
-        # ic("remotefiletablemodel listdirattr 3")
 
         if response == "error":
             error = queue.get_nowait()
@@ -198,7 +194,7 @@ class RemoteFileTableModel(QAbstractTableModel):
             f = True
 
         delete_response_queue(job_id)
-        ic("remotefiletablemodel listdirattr ends")
+        ic()
         if f:
             return list
         else:

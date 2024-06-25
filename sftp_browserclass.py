@@ -240,7 +240,7 @@ class Browser(QWidget):
         add_sftp_job(remote_path, True, remote_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "listdir", job_id )
 
         self.progressBar.setRange(0, 0)
-        while check_response_queue(job_id).empty():
+        while queue.empty():
             self.non_blocking_sleep(100)  # Sleeps for 1000 milliseconds (1 second)
         response = queue.get_nowait()
         self.progressBar.setRange(0, 100)
@@ -442,6 +442,28 @@ class Browser(QWidget):
             ic(is_file)
             delete_response_queue(job_id)
             return is_file
+
+    def waitjob(self, job_id):
+        # Initialize the progress bar
+        self.progressBar.setRange(0, 100)
+        self.progressBar.setValue(0)
+
+        progress_value = 0
+        while not check_response_queue(job_id):
+            # Increment progress by 10%, up to 100%
+            progress_value = min(progress_value + 10, 100)
+            self.progressBar.setValue(progress_value)
+
+            # Sleep and process events to keep UI responsive
+            self.non_blocking_sleep(100)
+            QApplication.processEvents()  # Process any pending GUI events
+
+        # Reset the progress bar after completion
+        self.progressBar.setValue(100)
+        self.progressBar.setRange(0, 100)
+
+        # Return after the job is done
+        return
 
     def focusInEvent(self, event):
         self.setStyleSheet("""

@@ -130,22 +130,26 @@ class RemoteFileBrowser(FileBrowser):
                 temp_path = self.model.data(index, Qt.DisplayRole)
 
                 if temp_path != "..":
-                    path = os.path.join( creds.get('current_remote_directory'), temp_path )
-                    if self.is_remote_directory(temp_path):
-                        ic("doubleclickhandler change directory?")
-                        self.change_directory(path.replace("\\", "/"))
+                    if not self.is_complete_path(temp_path):
+                        path = os.path.join( creds.get('current_remote_directory'), temp_path )
+                    else:
+                        path = temp_path
+                    ic()
+                    ic(path)
+
+                    if self.is_remote_directory(path):
+                        self.change_directory(path)
                     elif self.is_remote_file(temp_path):
-                        ic("RemoteFileBrowser double_click_handler is_remote_file()")
                         local_path = QFileDialog.getSaveFileName(self, "Save File", os.path.basename(temp_path))[0]
+                        ic( temp_path, local_path )
                         if local_path:
                             # Assuming upload_download is a method to handle the download
-                            ic("doubleclickhandler uploaddownload")
-                            self.upload_download(local_path)
+                            ic()
+                            self.upload_download(path)
                             # Emit a signal or log the download
                             self.message_signal.emit(f"Downloaded file: {path} to {local_path}")
                 if temp_path == "..":
-                    ic("RemoteFileBrowser double_click_handler temp_path == ..")
-                    ic("doubleclickhandler go up a dir")
+                    ic()
                     self.change_directory(temp_path)
 
                 return True
@@ -161,6 +165,9 @@ class RemoteFileBrowser(FileBrowser):
 
         if not ok:
             return
+
+        ic()
+        ic(selected_item)
 
         if self.is_remote_directory(selected_item):
             ic(selected_item)
@@ -184,6 +191,8 @@ class RemoteFileBrowser(FileBrowser):
                     selected_item = current_browser.model().data(current_index, Qt.DisplayRole)
                     if creds.get('current_remote_directory') == '.':
                         temp_path = self.sftp_getcwd()
+                    else:
+                        temp_path = creds.get('current_remote_directory')
                     set_credentials(self.session_id, 'current_remote_directory', self.remove_trailing_dot(temp_path))
                     remote_path = os.path.join( creds.get('current_remote_directory'), selected_item )
             else:
@@ -261,6 +270,7 @@ class RemoteFileBrowser(FileBrowser):
                             local_path = self.normalize_path( selected_path )
 
                         ic()
+                        ic(entry_path)
                         if self.is_remote_directory(entry_path):
                             ic(entry_path, local_path)
                             # Download directory
@@ -282,9 +292,13 @@ class RemoteFileBrowser(FileBrowser):
             self.message_signal.emit("Current browser is not a valid QTableView.")
 
     def download_directory(self, source_directory, destination_directory):
+        ic()
+
         try:
             # Create a local folder with the same name as the remote folder
+            ic(source_directory, destination_directory)
             local_folder = os.path.join(destination_directory, os.path.basename(source_directory))
+            ic(local_folder)
 
             if os.path.exists(local_folder):
                 # Check if 'always' option was selected before
@@ -307,18 +321,21 @@ class RemoteFileBrowser(FileBrowser):
                 os.makedirs(local_folder, exist_ok=True)
 
             # List the contents of the remote directory
-            directory_contents = self.sftp_listdir(source_directory.replace("\\", "/"))
+            directory_contents = self.sftp_listdir(source_directory)
             ic(directory_contents)
 
             # Download files and recurse into subdirectories
             for entry in directory_contents:
-                entry_path = os.path.join(source_directory, entry)
+                # entry_path = os.path.join(source_directory, entry)
+                entry_path = self.get_normalized_remote_path( source_directory, entry)
                 local_entry_path = os.path.join(local_folder, entry)
 
                 # If it's a directory, recursively download its contents
-                if self.is_remote_directory(entry_path.replace("\\", "/")):
+                ic()
+                ic(entry_path)
+                if self.is_remote_directory(entry_path):
                     self.message_signal.emit(f"download_directory() {entry_path}, {local_folder}")
-                    self.download_directory(entry_path.replace("\\", "/"), local_folder)
+                    self.download_directory(entry_path, local_folder)
                 else:
                     # If it's a file, download it
                     self.message_signal.emit(f"download_directory() {entry_path}, {local_entry_path}")
@@ -341,7 +358,7 @@ class RemoteFileBrowser(FileBrowser):
                         elif response == QMessageBox.No:
                             return
                     try:
-                        os.remove(local_entry_path.replace("\\","/"))
+                        os.remove(local_entry_path)
                     except Exception as e:
                         self.message_signal.emit(f"download_directory() {e}")
                         pass
@@ -351,9 +368,9 @@ class RemoteFileBrowser(FileBrowser):
 
                     queue_item = QueueItem( os.path.basename(entry_path), job_id )
                     queue_display_append(queue_item)
-                    ic("add_sftp_job")
+                    ic()
                     ic(job_id)
-                    add_sftp_job(entry_path.replace("\\", "/"), True, local_entry_path, False, self.init_hostname, self.init_username, self.init_password, self.init_port, "download", job_id)
+                    add_sftp_job(entry_path, True, local_entry_path, False, self.init_hostname, self.init_username, self.init_password, self.init_port, "download", job_id)
 
         except Exception as e:
             self.message_signal.emit(f"download_directory() {e}")
