@@ -271,6 +271,7 @@ class RemoteFileBrowser(FileBrowser):
 
                         ic()
                         ic(entry_path)
+                        
                         if self.is_remote_directory(entry_path):
                             ic(entry_path, local_path)
                             # Download directory
@@ -328,6 +329,7 @@ class RemoteFileBrowser(FileBrowser):
             for entry in directory_contents:
                 # entry_path = os.path.join(source_directory, entry)
                 entry_path = self.get_normalized_remote_path( source_directory, entry)
+                ic(entry_path)
                 local_entry_path = os.path.join(local_folder, entry)
 
                 # If it's a directory, recursively download its contents
@@ -360,7 +362,6 @@ class RemoteFileBrowser(FileBrowser):
                     try:
                         os.remove(local_entry_path)
                     except Exception as e:
-                        self.message_signal.emit(f"download_directory() {e}")
                         pass
 
                     self.message_signal.emit(f"download_directory() {entry_path}, {local_entry_path}")
