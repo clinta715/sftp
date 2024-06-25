@@ -2,8 +2,10 @@ from PyQt5.QtWidgets import QTableView, QApplication, QWidget, QVBoxLayout, QLab
 from PyQt5.QtCore import pyqtSignal, QTimer, Qt, QEventLoop
 from PyQt5 import QtCore
 from stat import S_ISDIR
+import stat
 import os
 from icecream import ic
+from pathlib import Path
 
 from sftp_creds import get_credentials, create_random_integer, set_credentials
 from sftp_downloadworkerclass import create_response_queue, delete_response_queue, check_response_queue, add_sftp_job, QueueItem, queue
@@ -12,40 +14,35 @@ from sftp_backgroundthreadwindow import queue_display_append
 class Browser(QWidget):
     def __init__(self, title, session_id, parent=None):
         super().__init__(parent)  # Initialize the QWidget parent class
+        ic()
+        self.observers = []        
         self.title = title
         self.model = None
         self.session_id = session_id
         self.user_choice = None
-        ic("browser class init complete 1")
         self.init_global_creds()
-        ic("init global creds done")
         self.init_ui()
 
     def init_global_creds(self):
-        # ic("init_global_creds")
+        ic()
         creds = get_credentials(self.session_id)
-        # ic(creds)
-        # ic("init global creds 2")
         try:
             self.init_hostname = creds.get('hostname')
         except Exception as e:
             ic(e)
 
-        # ic("init global creds 3")
         self.init_username = creds.get('username')
-        # ic("init global creds 4")
         self.init_password = creds.get('password')
-        # ic("init global creds 5")
         self.init_port = creds.get('port')
 
     # Define a signal for sending messages to the console
     message_signal = pyqtSignal(str)
 
     def init_ui(self):
+        ic()
         self.layout = QVBoxLayout()
         self.label = QLabel(self.title)
         self.layout.addWidget(self.label)
-        # ic("init ui browser 1")
         # Initialize and set the model for the table
         self.table = QTableView()
 
@@ -55,7 +52,6 @@ class Browser(QWidget):
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        # ic("init ui browser 2")
         # Enable sorting
         self.table.setSortingEnabled(True)
 
@@ -63,23 +59,91 @@ class Browser(QWidget):
         self.table.horizontalHeader().sectionClicked.connect(self.on_header_clicked)
         self.table.doubleClicked.connect(self.double_click_handler)
         self.table.customContextMenuRequested.connect(self.context_menu_handler)
-        # ic("init ui browser 3")
         # UI configuration
         self.table.setFocusPolicy(Qt.StrongFocus)
         self.table.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.table.sortByColumn(0, Qt.AscendingOrder)
 
         self.layout.addWidget(self.table)  # Correctly add the table to the layout
-        # ic("init ui browser 4")
         # Add the table and status bar to the layout
         self.progressBar = QProgressBar()
         self.layout.addWidget(self.progressBar)
 
         # Set the main layout of the widget
         self.setLayout(self.layout)
-        # ic("browser class ui init complete 2")
+
+    def add_observer(self, observer):
+        self.observers.append(observer)
+
+    def notify_observers(self):
+        for observer in self.observers:
+            observer.model.get_files()
+
+    def get_normalized_remote_path(self, current_remote_directory, partial_remote_path=None):
+        """
+        Get a normalized remote path by joining the current remote directory with a partial path.
+        If no partial path is provided, return the normalized current remote directory.
+        
+        Args:
+            current_remote_directory (str): The base directory on the remote server.
+            partial_remote_path (str, optional): The partial path to be appended.
+            
+        Returns:
+            str: The normalized remote path with forward slashes and no trailing slash.
+        """
+        # Replace backslashes with forward slashes in the base directory
+        current_remote_directory = current_remote_directory.replace("\\", "/")
+
+        if partial_remote_path is not None:
+            # Replace backslashes with forward slashes in the partial path
+            partial_remote_path = partial_remote_path.replace("\\", "/")
+            
+            # Join paths and normalize
+            remote_path = os.path.join(current_remote_directory, partial_remote_path)
+            normalized_path = os.path.normpath(remote_path)
+        else:
+            # Normalize the current remote directory
+            normalized_path = os.path.normpath(current_remote_directory)
+        
+        # Convert backslashes to forward slashes in the final path
+        normalized_path = normalized_path.replace("\\", "/")
+        
+        # Remove the trailing slash if it's not the root '/'
+        if normalized_path != '/':
+            normalized_path = normalized_path.rstrip('/')
+        
+        return normalized_path
+
+    def is_complete_path(self, path):
+        """
+        Determine if a path is a complete path or just a filename/directory name.
+        
+        Args:
+            path (str): The filesystem path to check.
+            
+        Returns:
+            bool: True if the path is a complete path, False if it's just a filename/directory name.
+        """
+        # Convert to a Path object for easier manipulation
+        p = Path(path)
+        
+        # Check if it's an absolute path or starts with a '/' (Unix-like absolute path)
+        if p.is_absolute() or path.startswith('/'):
+            return True
+        
+        # Check if it has more than one part (indicating it's not just a simple name)
+        if len(p.parts) > 1:
+            return True
+        
+        # Check if it ends with a slash (indicating it's intended as a directory name)
+        if path.endswith('/') or path.endswith('\\'):
+            return False
+        
+        # It's likely just a name if none of the above conditions are met
+        return False        
 
     def split_path(self, path):
+        ic()
         # try to deal with windows backslashes
         if "\\" in path:
             # Use "\\" as the separator
@@ -94,11 +158,12 @@ class Browser(QWidget):
         return head, tail
 
     def sftp_mkdir(self, remote_path):
+        ic()
         creds = get_credentials(self.session_id)
         job_id = create_random_integer()
         queue = create_response_queue(job_id)
 
-        add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "mkdir", job_id )
+        add_sftp_job(remote_path, True, remote_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "mkdir", job_id )
 
         while queue.empty():
             self.non_blocking_sleep(100)
@@ -113,16 +178,18 @@ class Browser(QWidget):
             # if its a success then we dont care about the response and the queue will be deleted
             f = True
 
-        self.model.get_files()
         delete_response_queue(job_id)
+        self.model.get_files()
+        self.notify_observers()
         return f
 
     def sftp_rmdir(self, remote_path):
+        ic()
         creds = get_credentials(self.session_id)
         job_id = create_random_integer()
         queue = create_response_queue(job_id)
 
-        add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "rmdir", job_id )
+        add_sftp_job(remote_path, True, remote_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "rmdir", job_id )
 
         while queue.empty():
             self.non_blocking_sleep(100)
@@ -135,16 +202,18 @@ class Browser(QWidget):
         else:
             f = True
 
-        self.model.get_files()
         delete_response_queue(job_id)
+        self.get_files()
+        self.notify_observers()
         return f
 
     def sftp_remove(self, remote_path ):
+        ic()
         creds = get_credentials(self.session_id)
         job_id = create_random_integer()
         queue = create_response_queue(job_id)
 
-        add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "remove", job_id )
+        add_sftp_job(remote_path, True, remote_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "remove", job_id )
 
         while queue.empty():
             self.non_blocking_sleep(100)
@@ -157,16 +226,18 @@ class Browser(QWidget):
         else:
             f = True
 
-        self.model.get_files()
         delete_response_queue(job_id)
+        self.get_files()
+        self.notify_observers()
         return f
 
     def sftp_listdir(self, remote_path ):
+        ic()
         creds = get_credentials(self.session_id)
         job_id = create_random_integer()
         queue = create_response_queue(job_id)
 
-        add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "listdir", job_id )
+        add_sftp_job(remote_path, True, remote_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "listdir", job_id )
 
         self.progressBar.setRange(0, 0)
         while check_response_queue(job_id).empty():
@@ -177,7 +248,6 @@ class Browser(QWidget):
         if response == "error":
             error = queue.get_nowait()
             self.message_signal.emit(f"FileBrowser sftp_listdir() {error}")
-            # ic(error)
             f = False
         else:
             list = queue.get_nowait()
@@ -203,7 +273,7 @@ class Browser(QWidget):
         job_id = create_random_integer()
         queue = create_response_queue(job_id)
 
-        add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "listdir_attr", job_id )
+        add_sftp_job(remote_path, True, remote_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "listdir_attr", job_id )
 
         while queue.empty():
             self.non_blocking_sleep(100)
@@ -223,89 +293,153 @@ class Browser(QWidget):
         else:
             return f
 
+    def normalize_path(self, path):
+        """
+        Normalize the given path by collapsing redundant slashes and up-level references.
+        
+        Args:
+            path (str): The filesystem path to normalize.
+            
+        Returns:
+            str: The normalized path.
+        """
+        return os.path.normpath(path)
+
     def on_header_clicked(self, logicalIndex):
         # Check the current sort order and toggle it
         # not the best, should really be revised 
         order = Qt.DescendingOrder if self.table.horizontalHeader().sortIndicatorOrder() == Qt.AscendingOrder else Qt.AscendingOrder
         self.table.sortByColumn(logicalIndex, order)
 
-    def is_remote_directory(self, partial_remote_path ):
-        ic("is remote directory")
+    def is_remote_directory(self, partial_remote_path):
+        ic()
         ic(partial_remote_path)
-        creds = get_credentials(self.session_id)
-        # check to see if remote_path is in fact a file or a directory on the current remote connection 
-        job_id = create_random_integer()
-        queue = create_response_queue(job_id)
 
-        remote_path = creds.get('current_remote_directory') + "/" + partial_remote_path
+        is_directory = False
+        
+        try:
+            # Retrieve credentials once
+            creds = get_credentials(self.session_id)
+
+            # Normalize the path
+            if not self.is_complete_path(partial_remote_path):
+                remote_path = self.get_normalized_remote_path(creds.get('current_remote_directory'), partial_remote_path)
+            else:
+                remote_path = self.get_normalized_remote_path(partial_remote_path)
+            
+        except Exception as e:
+            self.message_signal.emit(f"Error in getting credentials or forming remote path: {e}")
+            ic(e)
+            return False
+
+        ic()
         ic(remote_path)
 
+        # Create job and response queue
+        job_id = create_random_integer()
+        queue = create_response_queue(job_id)
+        
         try:
-            add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "stat", job_id )
+            add_sftp_job(
+                remote_path, True,
+                remote_path, True,
+                creds.get('hostname'), creds.get('username'), creds.get('password'),
+                creds.get('port'), "stat", job_id
+            )
 
+            # Wait for a response
             while queue.empty():
                 self.non_blocking_sleep(100)
+            
             response = queue.get_nowait()
+            ic(response)
 
-            if not response == "error":
-                attributes = queue.get_nowait()
-                is_directory = S_ISDIR(attributes.st_mode)
-                ic(is_directory)
-            else:
+            if response == "error":
                 error = queue.get_nowait()
-                self.message_signal.emit(f"FileBrowser is_remote_directory() {error}")
+                self.message_signal.emit(f"SFTP job error: {error}")
                 ic(error)
-                is_directory = False
-
-        except Exception as e:
-            self.message_signal.emit(f"FileBrowser is_remote_directory() {e}")
-            ic(e)
-            is_directory = False
-
-        finally:
-            ic(is_directory)
-            delete_response_queue(job_id)
-            if is_directory:
-                return True
-            else:
                 return False
 
-    def is_remote_file(self, remote_path ):
-        # ic("Is remote file")
-        creds = get_credentials(self.session_id)
-        # check to see if remote_path is in fact a file or a directory on the current remote connection
-        job_id = create_random_integer()
-        queue = create_response_queue( job_id )
+            # Extract attributes correctly from response
+            attributes = queue.get_nowait()
+            if stat.S_ISDIR(attributes.st_mode):
+                is_directory = True
+            
+            #if isinstance(response, dict) and 'attributes' in response:
+            #    attributes = response['attributes']
+            #elif hasattr(response, 'mode'):
+            #    attributes = response
+            #else:
+            #    self.message_signal.emit("Invalid attributes in response.")
+            #    ic("Invalid attributes")
+            #    ic(attributes)
+            #    return False
+        
+        except queue.Empty:
+            self.message_signal.emit("Queue was empty unexpectedly.")
+            is_directory = False
+        except Exception as e:
+            self.message_signal.emit(f"Unexpected error: {e}")
+            ic(e)
+            is_directory = False
+        finally:
+            delete_response_queue(job_id)
+            ic(is_directory)
+            return is_directory
 
+
+    def is_remote_file(self, partial_remote_path):
+        is_file = False
+        ic()
+        
         try:
-            # ic("add job")
-            add_sftp_job(remote_path.replace("\\", "/"), True, remote_path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "stat", job_id )
+            # Retrieve credentials once
+            creds = get_credentials(self.session_id)
 
+            # Normalize the path
+            if not self.is_complete_path(partial_remote_path):
+                remote_path = self.get_normalized_remote_path(creds.get('current_remote_directory'), partial_remote_path)
+            else:
+                remote_path = self.get_normalized_remote_path(partial_remote_path)
+            
+        except Exception as e:
+            self.message_signal.emit(f"Error in getting credentials or forming remote path: {e}")
+            ic(e)
+            return False
+
+        # Create job and response queue
+        job_id = create_random_integer()
+        queue = create_response_queue(job_id)
+        
+        try:
+            add_sftp_job(remote_path, True, remote_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "stat", job_id)
+
+            # Wait for a response
             while queue.empty():
                 self.non_blocking_sleep(100)
-            response = queue.get_nowait()
-            # ic(response)
 
-            if not response == "error":
+            response = queue.get_nowait()
+            ic(response)
+
+            if response != "error":
                 attributes = queue.get_nowait()
+                ic(attributes)
                 is_directory = S_ISDIR(attributes.st_mode)
-                if is_directory:
-                    is_file = False
+                is_file = not is_directory
             else:
                 error = queue.get_nowait()
+                ic(error)
                 is_file = False
 
         except FileNotFoundError:
-            # If the file doesn't exist, treat it as not a file
             is_file = False
 
         except Exception as e:
-            # Handle other exceptions (e.g., permission denied, etc.) if needed
             self.message_signal.emit(f"FileBrowser is_remote_file() {e}")
             is_file = False
 
         finally:
-            # ic(is_file)
+            ic(is_file)
             delete_response_queue(job_id)
             return is_file
 
@@ -355,6 +489,7 @@ class Browser(QWidget):
 
             finally:
                 self.model.get_files()
+                self.notify_observers()
 
     def change_directory(self, path ):
         # this is a function to change the current LOCAL working directory, it also uses this moment to refresh the local file list
@@ -363,7 +498,8 @@ class Browser(QWidget):
             # Local file browser
             os.chdir(path)
             set_credentials(self.session_id, 'current_local_directory', os.getcwd() )
-            self.model.get_files()  # Update local file browser with new directory contents
+            self.model.get_files()
+            self.notify_observers()
         except Exception as e:
             # Append error message to the output_console
             self.message_signal.emit(f"change_directory() {e}")
@@ -428,6 +564,7 @@ class Browser(QWidget):
 
     def upload_download(self):
         # based on what the user clicked, let's decide if it's a local file needing uploading or a remote file needing downloading
+        # if we're being run, it means we are local, in FileBrowser, otherwise we'd be overloaded by RemoteFileBrowser
         creds = get_credentials(self.session_id)
 
         current_browser = self.focusWidget()
@@ -442,11 +579,16 @@ class Browser(QWidget):
 
                 if selected_item_text:
                     # Construct the full path of the selected item
-                    selected_path = os.path.join(creds.get('current_local_directory'), selected_item_text)
+                    # selected_path = os.path.join(creds.get('current_local_directory'), selected_item_text)
+                    if not self.is_complete_path( selected_item_text):
+                        selected_path = os.path.join( creds.get('current_local_directory'), selected_item_text )
+                    else:
+                        selected_path = self.normalize_path( selected_item_text )
 
                     try:
-                        remote_entry_path = os.path.join( creds.get('current_remote_directory'), selected_item_text )
+                        remote_entry_path = self.get_normalized_remote_path( creds.get('current_remote_directory'), selected_item_text )
                         # ic(remote_entry_path, selected_item_text, selected_path)
+                        # construct a path for the remote destination
 
                         if os.path.isdir(selected_path):
                             # Upload a local directory to the remote server
@@ -461,7 +603,7 @@ class Browser(QWidget):
                             queue_display_append(queue_item)
 
                             # Assuming add_sftp_job handles the actual upload process
-                            add_sftp_job(selected_path, False, remote_entry_path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "upload", job_id)
+                            add_sftp_job(selected_path, False, remote_entry_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "upload", job_id)
                     except Exception as e:
                         self.message_signal.emit(f"upload_download() {e}")
                 else:
@@ -498,7 +640,7 @@ class Browser(QWidget):
                     return
             else:
                 try:
-                    success = self.sftp_mkdir(remote_folder.replace("\\", "/")) 
+                    success = self.sftp_mkdir(remote_folder) 
                     if not success or self.always_continue_upload:
                         self.message_signal.emit(f"sftp_mkdir() error creating {remote_folder} but always_continue_upload is {self.always_continue_upload}")
                         return
@@ -510,22 +652,22 @@ class Browser(QWidget):
 
             for entry in local_contents:
                 entry_path = os.path.join(source_directory, entry)
-                remote_entry_path = os.path.join(remote_folder, entry)
+                remote_entry_path = self.get_normalized_remote_path(remote_folder, entry)
 
                 job_id = create_random_integer()
 
                 if os.path.isdir(entry_path):
                     queue_item = QueueItem( os.path.basename(entry_path), job_id )
                     queue_display_append(queue_item)
-                    self.sftp_mkdir(remote_entry_path.replace("\\", "/"))
-                    self.upload_directory(entry_path, remote_entry_path.replace("\\", "/"))
+                    self.sftp_mkdir(remote_entry_path)
+                    self.upload_directory(entry_path, remote_entry_path)
                 else:
                     self.message_signal.emit(f"{entry_path}, {remote_entry_path}")
 
                     queue_item = QueueItem( os.path.basename(entry_path), job_id )
                     queue_display_append(queue_item)
 
-                    add_sftp_job(entry_path, False, remote_entry_path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "upload", job_id)
+                    add_sftp_job(entry_path, False, remote_entry_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "upload", job_id)
 
         except Exception as e:
             self.message_signal.emit(f"upload_directory() {e}")
@@ -545,7 +687,7 @@ class Browser(QWidget):
         queue = create_response_queue(job_id)
 
         try:
-            add_sftp_job(path.replace("\\", "/"), True, path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "stat", job_id )
+            add_sftp_job(path, True, path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "stat", job_id )
 
             while queue.empty():
                 self.non_blocking_sleep(100)
@@ -585,3 +727,4 @@ class Browser(QWidget):
 
         finally:
             self.model.get_files()
+            self.notify_observers()

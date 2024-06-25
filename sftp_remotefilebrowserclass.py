@@ -23,7 +23,7 @@ class RemoteFileBrowser(FileBrowser):
 
         # Resize the first column based on its contents
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        ic("init set current remote dir")
+        ic()
 
         set_credentials(self.session_id, 'current_remote_directory', self.sftp_getcwd())
 
@@ -44,6 +44,7 @@ class RemoteFileBrowser(FileBrowser):
                 self.sftp_mkdir(directory_name)
                 self.message_signal.emit(f"'{directory_name}' created successfully.")
                 self.model.get_files()
+                self.notify_observers()
             except Exception as e:
                 self.message_signal.emit(f"Error creating directory: {e}")
 
@@ -52,7 +53,7 @@ class RemoteFileBrowser(FileBrowser):
         job_id = create_random_integer()
         queue = create_response_queue( job_id )
 
-        ic("sftp_getcwd")
+        ic()
         ic(creds)
 
         try:
@@ -60,11 +61,9 @@ class RemoteFileBrowser(FileBrowser):
         except Exception as e:
             ic(e)
 
-        ic("waiting")
         while queue.empty():
             self.non_blocking_sleep(100)  # Sleeps for 1000 milliseconds (1 second)
         response = queue.get_nowait()
-        ic("response")
 
         if response == "error":
             response = queue.get_nowait()
@@ -111,6 +110,7 @@ class RemoteFileBrowser(FileBrowser):
 
             self.message_signal.emit(f"{new_path}")
             self.model.get_files()
+            self.notify_observers()
             self.table.viewport().update()
             f = True
         except Exception as e:
@@ -124,15 +124,12 @@ class RemoteFileBrowser(FileBrowser):
 
     def double_click_handler(self, index):
         creds = get_credentials(self.session_id)
-        # ic("RemoteFileBrowser double_click_handler")
         try:
             if index.isValid():
                 # Retrieve the file path from the model
-                # ic("RemoteFileBrowser double_click_handler index.isValid()")
                 temp_path = self.model.data(index, Qt.DisplayRole)
 
                 if temp_path != "..":
-                    # ic("RemoteFileBrowser double_click_handler temp_path != ..")
                     path = os.path.join( creds.get('current_remote_directory'), temp_path )
                     if self.is_remote_directory(temp_path):
                         ic("doubleclickhandler change directory?")
@@ -166,6 +163,7 @@ class RemoteFileBrowser(FileBrowser):
             return
 
         if self.is_remote_directory(selected_item):
+            ic(selected_item)
             self.change_directory(selected_item)
 
     def remove_trailing_dot(self, s):
@@ -223,16 +221,16 @@ class RemoteFileBrowser(FileBrowser):
                 self.message_signal.emit(f"Recursing into subdirectory: {entry_path}")
                 self.remove_directory_with_prompt(entry_path)
 
-
             # Remove the directory
             self.sftp_rmdir(remote_path)
             self.message_signal.emit(f"Directory '{remote_path}' removed successfully.")
             self.model.get_files()
+            self.notify_observers()
 
         except Exception as e:
             self.message_signal.emit(f"remove_directory_with_prompt() {e}")
 
-    def upload_download(self):
+    def upload_download(self, optionalpath=None):
         creds = get_credentials(self.session_id)
         if creds.get('current_remote_directory') == '.':
             set_credentials( self.session_id, 'current_remote_directory', self.sftp_getcwd())
@@ -244,26 +242,35 @@ class RemoteFileBrowser(FileBrowser):
             if index.isValid():
                 selected_item_text = current_browser.model().data(index, Qt.DisplayRole)
 
+                if optionalpath:
+                    selected_item_text = optionalpath
+
                 if selected_item_text:
                     selected_path = selected_item_text  # Assuming this is the full path or relative path
 
                     try:
                         # local_entry_path = os.path.join(os.getcwd(), os.path.basename(selected_path))
-                        entry_path = os.path.join( creds.get('current_remote_directory'), os.path.basename(selected_path))
-                        local_path = os.path.join( os.getcwd(), os.path.basename(selected_path))
+                        if not self.is_complete_path( selected_path ):
+                            entry_path = self.get_normalized_remote_path( creds.get('current_remote_directory'), selected_path)
+                        else:
+                            entry_path = self.get_normalized_remote_path( selected_path )
 
-                        ic("remotefilebrowser uploaddownload is remote directory")
+                        if not self.is_complete_path( selected_path ):
+                            local_path = os.path.join( creds.get('current_local_directory'), os.path.basename(selected_path))
+                        else:
+                            local_path = self.normalize_path( selected_path )
+
+                        ic()
                         if self.is_remote_directory(entry_path):
+                            ic(entry_path, local_path)
                             # Download directory
-                            ic("    yes remote directory")
                             self.download_directory(entry_path, local_path)
                         else:
                             # Download file
-                            ic("    no remote file")
                             job_id = create_random_integer()
                             queue_item = QueueItem(entry_path, job_id)
                             queue_display_append(queue_item)
-                            ic("adding remote file to download job queue")
+                            ic(entry_path, local_path)
                             ic(job_id)
                             add_sftp_job(entry_path, True, local_path, False, self.init_hostname, self.init_username, self.init_password, self.init_port, "download", job_id)
                     except Exception as e:

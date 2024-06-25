@@ -148,6 +148,9 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         browser_layout.addWidget(self.left_browser)
         browser_layout.addWidget(self.right_browser)
 
+        self.left_browser.add_observer(self.right_browser)
+        self.right_browser.add_observer(self.left_browser)
+
         # Create the main layout
         main_layout = QVBoxLayout()
         main_layout.addLayout(browser_layout)
@@ -353,6 +356,8 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
             if self.username.text():
                 self.temp_username = self.username.text()
         else:
+            if not username:
+                return
             self.temp_username = username
 
         ic("set_credentials")
@@ -364,6 +369,8 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
             if self.password.text():
                 self.temp_password = self.password.text()
         else:
+            if not password:
+                return
             self.temp_password = password
 
         ic("set_credentials")
@@ -374,16 +381,20 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         if self.port_selector.text():
             self.temp_port = self.port_selector.text()
         else:
+            if not port:
+                port = "22"
             self.temp_port = port
 
         ic("set_credentials")
         ic(self.session_id)
         ic(self.temp_port)
+
         set_credentials( self.session_id, 'port', self.temp_port)
         set_credentials( self.session_id, 'current_local_directory', os.getcwd())
         # this either needs to be set to . or we need to sftp_getcwd it.... can't remember
         set_credentials( self.session_id, 'current_remote_directory', '.')
 
+        # refresh current creds
         creds = get_credentials(self.session_id)
         ic(creds)
 
@@ -412,7 +423,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         add_sftp_job(".", False, ".", False, "localhost", "guest", "guest", 69, "end", 69)
 
 def main():
-    ic.disable()
+    # ic.disable()
 
     def hide_transfers_window():
         if not hasattr(hide_transfers_window, "transfers_hidden"):
