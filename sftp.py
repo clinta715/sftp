@@ -44,6 +44,8 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         QCoreApplication.instance().aboutToQuit.connect(self.cleanup)
         self.hostnames = []
         self.sessions = []
+        self.observers = []
+        self._notifying = False  # Flag to track notification status
         self.init_ui()
 
     def init_ui(self):

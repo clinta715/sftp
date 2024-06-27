@@ -15,7 +15,7 @@ class Browser(QWidget):
     def __init__(self, title, session_id, parent=None):
         super().__init__(parent)  # Initialize the QWidget parent class
         ic()
-        self.observers = []        
+        self.observers = []
         self.title = title
         self.model = None
         self.session_id = session_id
@@ -72,12 +72,31 @@ class Browser(QWidget):
         # Set the main layout of the widget
         self.setLayout(self.layout)
 
-    def add_observer(self, observer):
-        self.observers.append(observer)
+    def get_files(self):
+        self.model.get_files()
+
+    def add_observer(self,observer):
+        if observer not in self.observers:
+            self.observers.append(observer)
+            ic("Observer added:", observer)
+        else:
+            ic("Observer already exists:", observer)
+
+    def remove_observer(self,observer):
+        if observer in self.observers:
+            self.observers.remove(observer)
+            ic("Observer removed:", observer)
 
     def notify_observers(self):
-        for observer in self.observers:
-            observer.model.get_files()
+            ic()
+            for observer in self.observers:
+                try:
+                    self.observer.get_files()  # Notify the observer by calling its update method
+                    ic("Observer notified:", observer)
+                except AttributeError as ae:
+                    ic("Observer", observer, "does not implement 'get_files' method.", ae)
+                except Exception as e:
+                    ic("An error occurred while notifying observer", observer, e)
 
     def get_normalized_remote_path(self, current_remote_directory, partial_remote_path=None):
         """

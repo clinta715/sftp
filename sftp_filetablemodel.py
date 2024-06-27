@@ -26,7 +26,7 @@ class FileTableModel(QAbstractTableModel):
         return False
 
     def get_files(self):
-        ic("get_files - file table model")
+        ic()
         creds = get_credentials(self.session_id)
 
         ic("FileTableModel get files")
@@ -43,7 +43,6 @@ class FileTableModel(QAbstractTableModel):
         # Add the '..' entry to represent the parent directory
         # Assuming that size, permissions, and modified_time for '..' are not relevant, set them to default values
         self.file_list.append(["..", 0, "----", "----"])
-        ic("get files 1")
 
         for item in items:
             # Get file name
@@ -73,14 +72,12 @@ class FileTableModel(QAbstractTableModel):
             # Append the file information to the list
             self.file_list.append([name, size, permissions, modified_time])
 
-        ic("get files 2")
         # Emit signal to update the view
         top_left = self.createIndex(0, 0)  # Top left cell of the table
         bottom_right = self.createIndex(self.rowCount() - 1, self.columnCount() - 1)  # Bottom right cell
         self.dataChanged.emit(top_left, bottom_right)
         self.endResetModel()
         self.layoutChanged.emit()
-        ic("getfiles was a success")
 
     def rowCount(self, parent=QModelIndex()):
         # Return the number of items in your files list

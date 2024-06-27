@@ -125,36 +125,40 @@ class RemoteFileBrowser(FileBrowser):
     def double_click_handler(self, index):
         creds = get_credentials(self.session_id)
         try:
-            if index.isValid():
-                # Retrieve the file path from the model
-                temp_path = self.model.data(index, Qt.DisplayRole)
-
-                if temp_path != "..":
-                    if not self.is_complete_path(temp_path):
-                        path = os.path.join( creds.get('current_remote_directory'), temp_path )
-                    else:
-                        path = temp_path
-                    ic()
-                    ic(path)
-
-                    if self.is_remote_directory(path):
-                        self.change_directory(path)
-                    elif self.is_remote_file(temp_path):
-                        local_path = QFileDialog.getSaveFileName(self, "Save File", os.path.basename(temp_path))[0]
-                        ic( temp_path, local_path )
-                        if local_path:
-                            # Assuming upload_download is a method to handle the download
-                            ic()
-                            self.upload_download(path)
-                            # Emit a signal or log the download
-                            self.message_signal.emit(f"Downloaded file: {path} to {local_path}")
-                if temp_path == "..":
-                    ic()
-                    self.change_directory(temp_path)
-
-                return True
-            else:
+            if not index.isValid():
                 return False
+
+            # Retrieve the file path from the model
+            temp_path = self.model.data(index, Qt.DisplayRole)
+            
+            # Early return for parent directory navigation
+            if temp_path == "..":
+                ic()
+                self.change_directory(temp_path)
+                return True
+
+            # Determine the full path
+            if not self.is_complete_path(temp_path):
+                path = self.get_normalized_remote_path(creds.get('current_remote_directory'), temp_path)
+            else:
+                path = temp_path
+            
+            ic(path)
+
+            # Check if the path is a directory or a file
+            if self.is_remote_directory(path):
+                self.change_directory(path)
+            elif self.is_remote_file(path):
+                local_path = QFileDialog.getSaveFileName(self, "Save File", os.path.basename(temp_path))[0]
+                ic(temp_path, local_path)
+                if local_path:
+                    # Call upload_download to handle download (or upload if it was local)
+                    ic()
+                    self.upload_download(path, local_path)
+                    # Emit a signal or log the download
+                    self.message_signal.emit(f"Downloaded file: {path} to {local_path}")
+            
+            return True
 
         except Exception as e:
             ic(e)
@@ -241,52 +245,60 @@ class RemoteFileBrowser(FileBrowser):
 
     def upload_download(self, optionalpath=None):
         creds = get_credentials(self.session_id)
+        
+        # Update remote directory if necessary
         if creds.get('current_remote_directory') == '.':
-            set_credentials( self.session_id, 'current_remote_directory', self.sftp_getcwd())
+            current_remote_directory = self.sftp_getcwd()
+            set_credentials(self.session_id, 'current_remote_directory', current_remote_directory)
             creds = get_credentials(self.session_id)
+        else:
+            current_remote_directory = creds.get('current_remote_directory')
+
         current_browser = self.focusWidget()
 
         if current_browser is not None and isinstance(current_browser, QTableView):
             index = current_browser.currentIndex()
             if index.isValid():
-                selected_item_text = current_browser.model().data(index, Qt.DisplayRole)
-
-                if optionalpath:
-                    selected_item_text = optionalpath
-
+                selected_item_text = optionalpath if optionalpath else current_browser.model().data(index, Qt.DisplayRole)
+                
                 if selected_item_text:
-                    selected_path = selected_item_text  # Assuming this is the full path or relative path
-
                     try:
-                        # local_entry_path = os.path.join(os.getcwd(), os.path.basename(selected_path))
-                        if not self.is_complete_path( selected_path ):
-                            entry_path = self.get_normalized_remote_path( creds.get('current_remote_directory'), selected_path)
+                        # Normalize the selected path
+                        if not self.is_complete_path(selected_item_text):
+                            entry_path = self.get_normalized_remote_path(current_remote_directory, selected_item_text)
                         else:
-                            entry_path = self.get_normalized_remote_path( selected_path )
+                            entry_path = self.get_normalized_remote_path(selected_item_text)
 
-                        if not self.is_complete_path( selected_path ):
-                            local_path = os.path.join( creds.get('current_local_directory'), os.path.basename(selected_path))
+                        # Determine the local path
+                        local_base_path = creds.get('current_local_directory')
+                        if not self.is_complete_path(selected_item_text):
+                            local_path = os.path.join(local_base_path, os.path.basename(selected_item_text))
                         else:
-                            local_path = self.normalize_path( selected_path )
+                            local_path = self.normalize_path(selected_item_text)
 
-                        ic()
                         ic(entry_path)
                         
                         if self.is_remote_directory(entry_path):
                             ic(entry_path, local_path)
-                            # Download directory
+                            # Download the directory
                             self.download_directory(entry_path, local_path)
                         else:
-                            # Download file
+                            # Download the file
                             job_id = create_random_integer()
                             queue_item = QueueItem(entry_path, job_id)
                             queue_display_append(queue_item)
                             ic(entry_path, local_path)
                             ic(job_id)
-                            add_sftp_job(entry_path, True, local_path, False, self.init_hostname, self.init_username, self.init_password, self.init_port, "download", job_id)
+                            add_sftp_job(entry_path, True, local_path, False, 
+                                        self.init_hostname, self.init_username, 
+                                        self.init_password, self.init_port, 
+                                        "download", job_id)
                     except Exception as e:
-                        self.message_signal.emit(f"upload_download() {e}")
+                        error_message = f"upload_download() encountered an error: {str(e)}"
+                        self.message_signal.emit(error_message)
                         ic(e)
+                else:
+                    self.message_signal.emit("No valid path provided.")
             else:
                 self.message_signal.emit("No item selected or invalid index.")
         else:
