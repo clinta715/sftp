@@ -9,7 +9,7 @@ from pathlib import Path
 
 from sftp_creds import get_credentials, create_random_integer, set_credentials
 from sftp_downloadworkerclass import create_response_queue, delete_response_queue, check_response_queue, add_sftp_job, QueueItem, queue
-from sftp_backgroundthreadwindow import queue_display_append
+# from sftp_backgroundthreadwindow import queue_display_append
 
 class Browser(QWidget):
     def __init__(self, title, session_id, parent=None):
@@ -91,7 +91,7 @@ class Browser(QWidget):
             ic()
             for observer in self.observers:
                 try:
-                    self.observer.get_files()  # Notify the observer by calling its update method
+                    observer.get_files()  # Notify the observer by calling its update method
                     ic("Observer notified:", observer)
                 except AttributeError as ae:
                     ic("Observer", observer, "does not implement 'get_files' method.", ae)
@@ -603,33 +603,31 @@ class Browser(QWidget):
             # Show the menu at the cursor position
             menu.exec_(current_browser.mapToGlobal(point))
 
-    def upload_download(self):
-        # based on what the user clicked, let's decide if it's a local file needing uploading or a remote file needing downloading
-        # if we're being run, it means we are local, in FileBrowser, otherwise we'd be overloaded by RemoteFileBrowser
-        creds = get_credentials(self.session_id)
+def upload_download(self):
+    # based on what the user clicked, let's decide if it's a local file needing uploading or a remote file needing downloading
+    # if we're being run, it means we are local, in FileBrowser, otherwise we'd be overloaded by RemoteFileBrowser
+    creds = get_credentials(self.session_id)
 
-        current_browser = self.focusWidget()
-        # did they click the local or remote browser
+    current_browser = self.focusWidget()
+    # did they click the local or remote browser
 
-        if current_browser is not None and isinstance(current_browser, QTableView):
-            index = current_browser.currentIndex()
-            # what thing did they click in that browser
+    if current_browser is not None and isinstance(current_browser, QTableView):
+        indexes = current_browser.selectedIndexes()
+        # Process each selected item in the browser
+        for index in indexes:
             if index.isValid():
-                # and now, what is that thing?!
+                # What is that thing?!
                 selected_item_text = current_browser.model().data(index, Qt.DisplayRole)
 
                 if selected_item_text:
                     # Construct the full path of the selected item
-                    # selected_path = os.path.join(creds.get('current_local_directory'), selected_item_text)
-                    if not self.is_complete_path( selected_item_text):
-                        selected_path = os.path.join( creds.get('current_local_directory'), selected_item_text )
+                    if not self.is_complete_path(selected_item_text):
+                        selected_path = os.path.join(creds.get('current_local_directory'), selected_item_text)
                     else:
-                        selected_path = self.normalize_path( selected_item_text )
+                        selected_path = self.normalize_path(selected_item_text)
 
                     try:
-                        remote_entry_path = self.get_normalized_remote_path( creds.get('current_remote_directory'), selected_item_text )
-                        # ic(remote_entry_path, selected_item_text, selected_path)
-                        # construct a path for the remote destination
+                        remote_entry_path = self.get_normalized_remote_path(creds.get('current_remote_directory'), selected_item_text)
 
                         if os.path.isdir(selected_path):
                             # Upload a local directory to the remote server
@@ -641,7 +639,6 @@ class Browser(QWidget):
                             job_id = create_random_integer()
                             queue_item = QueueItem(os.path.basename(selected_path), job_id)
                             # queue_display.append(queue_item)
-                            queue_display_append(queue_item)
 
                             # Assuming add_sftp_job handles the actual upload process
                             add_sftp_job(selected_path, False, remote_entry_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "upload", job_id)
@@ -649,10 +646,10 @@ class Browser(QWidget):
                         self.message_signal.emit(f"upload_download() {e}")
                 else:
                     self.message_signal.emit("Invalid item or empty path.")
-            else:
-                self.message_signal.emit("No item selected or invalid index.")
         else:
-            self.message_signal.emit("Current browser is not a valid QTableView.")
+            self.message_signal.emit("No valid items selected.")
+    else:
+        self.message_signal.emit("Current browser is not a valid QTableView.")
 
     def upload_directory(self, source_directory, destination_directory):
         creds = get_credentials(self.session_id)
@@ -699,14 +696,14 @@ class Browser(QWidget):
 
                 if os.path.isdir(entry_path):
                     queue_item = QueueItem( os.path.basename(entry_path), job_id )
-                    queue_display_append(queue_item)
+                    # queue_display_append(queue_item)
                     self.sftp_mkdir(remote_entry_path)
                     self.upload_directory(entry_path, remote_entry_path)
                 else:
                     self.message_signal.emit(f"{entry_path}, {remote_entry_path}")
 
                     queue_item = QueueItem( os.path.basename(entry_path), job_id )
-                    queue_display_append(queue_item)
+                    # queue_display_append(queue_item)
 
                     add_sftp_job(entry_path, False, remote_entry_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "upload", job_id)
 

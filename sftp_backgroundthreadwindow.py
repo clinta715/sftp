@@ -9,9 +9,6 @@ MAX_TRANSFERS = 4
 
 queue_display = []
 
-def queue_display_append(item):
-    queue_display.append(item)
-
 class BackgroundThreadWindow(QMainWindow):
     def __init__(self):
         super(BackgroundThreadWindow, self).__init__()
@@ -49,7 +46,7 @@ class BackgroundThreadWindow(QMainWindow):
         global queue_display
 
         # Iterate over the queue_display list and remove the item with the matching ID
-        queue_display = [item for item in queue_display if item.id != id_to_remove]
+        queue_display = [item for item in queue_display if item != id_to_remove]
 
         # Optionally, update the list widget after removal
         self.populate_queue_list()
@@ -62,7 +59,12 @@ class BackgroundThreadWindow(QMainWindow):
 
         # Iterate over the queue_display and add each filename to the list widget
         for item in queue_display:
-            self.list_widget.addItem(item.name)
+            self.list_widget.addItem(item)
+
+    def queue_display_append(self, item):
+        global queue_display
+
+        queue_display.append(item)
 
     def scroll_to_bottom(self):
         # Scroll to the bottom of the QTextEdit
@@ -86,7 +88,6 @@ class BackgroundThreadWindow(QMainWindow):
             port = job.port
             username = job.username
             command = job.command
-            # response_queue = job.response_queue
 
             self.start_transfer(job.id, job.source_path, job.destination_path, job.is_source_remote, job.is_destination_remote, hostname, port, username, password, command )
 
@@ -123,6 +124,8 @@ class BackgroundThreadWindow(QMainWindow):
         self.transfers.append(new_transfer)
         # Start the download worker in the thread pool
         self.thread_pool.start(new_transfer.download_worker)
+        self.queue_display_append(new_transfer.download_worker.job_source)
+        self.populate_queue_list()
         self.active_transfers += 1
 
     def transfer_finished(self, transfer_id):
@@ -167,7 +170,8 @@ class BackgroundThreadWindow(QMainWindow):
         # Remove the transfer from the list
         self.transfers = [t for t in self.transfers if t.transfer_id != transfer_id]
         self.text_console.append("Transfer removed from the transfers list.")
-        self.remove_queue_item_by_id(transfer_id)
+        self.remove_queue_item_by_id(transfer.download_worker.job_source)
+        self.populate_queue_list()
         self.active_transfers -= 1
 
     def update_text_console(self, transfer_id, message):
