@@ -254,17 +254,19 @@ class RemoteFileBrowser(FileBrowser):
         current_browser = self.focusWidget()
 
         if current_browser is not None and isinstance(current_browser, QTableView):
-            index = current_browser.currentIndex()
-            if index.isValid():
-                selected_item_text = optionalpath if optionalpath else current_browser.model().data(index, Qt.DisplayRole)
-                
-                if selected_item_text:
-                    try:
-                        # Normalize the selected path
-                        if not self.is_complete_path(selected_item_text):
-                            entry_path = self.get_normalized_remote_path(current_remote_directory, selected_item_text)
-                        else:
-                            entry_path = self.get_normalized_remote_path(selected_item_text)
+            indexes = current_browser.selectedIndexes()
+            
+            for index in indexes:
+                if index.isValid():
+                    selected_item_text = optionalpath if optionalpath else current_browser.model().data(index, Qt.DisplayRole)
+                    
+                    if selected_item_text:
+                        try:
+                            # Normalize the selected path
+                            if not self.is_complete_path(selected_item_text):
+                                entry_path = self.get_normalized_remote_path(current_remote_directory, selected_item_text)
+                            else:
+                                entry_path = self.get_normalized_remote_path(selected_item_text)
 
                         # Determine the local path
                         local_base_path = creds.get('current_local_directory')
@@ -273,31 +275,31 @@ class RemoteFileBrowser(FileBrowser):
                         else:
                             local_path = self.normalize_path(selected_item_text)
 
-                        ic(entry_path)
-                        
-                        if self.is_remote_directory(entry_path):
-                            ic(entry_path, local_path)
-                            # Download the directory
-                            self.download_directory(entry_path, local_path)
-                        else:
-                            # Download the file
-                            job_id = create_random_integer()
-                            queue_item = QueueItem(entry_path, job_id)
-                            queue_display_append(queue_item)
-                            ic(entry_path, local_path)
-                            ic(job_id)
-                            add_sftp_job(entry_path, True, local_path, False, 
-                                        self.init_hostname, self.init_username, 
-                                        self.init_password, self.init_port, 
-                                        "download", job_id)
-                    except Exception as e:
-                        error_message = f"upload_download() encountered an error: {str(e)}"
-                        self.message_signal.emit(error_message)
-                        ic(e)
+                            ic(entry_path)
+                            
+                            if self.is_remote_directory(entry_path):
+                                ic(entry_path, local_path)
+                                # Download the directory
+                                self.download_directory(entry_path, local_path)
+                            else:
+                                # Download the file
+                                job_id = create_random_integer()
+                                queue_item = QueueItem(entry_path, job_id)
+                                # queue_display_append(queue_item)
+                                ic(entry_path, local_path)
+                                ic(job_id)
+                                add_sftp_job(entry_path, True, local_path, False, 
+                                            self.init_hostname, self.init_username, 
+                                            self.init_password, self.init_port, 
+                                            "download", job_id)
+                        except Exception as e:
+                            error_message = f"upload_download() encountered an error: {str(e)}"
+                            self.message_signal.emit(error_message)
+                            ic(e)
+                    else:
+                        self.message_signal.emit("No valid path provided.")
                 else:
-                    self.message_signal.emit("No valid path provided.")
-            else:
-                self.message_signal.emit("No item selected or invalid index.")
+                    self.message_signal.emit("No item selected or invalid index.")
         else:
             self.message_signal.emit("Current browser is not a valid QTableView.")
 
@@ -329,6 +331,7 @@ class RemoteFileBrowser(FileBrowser):
             else:
                 self.message_signal.emit(f"mkdir {local_folder}")
                 os.makedirs(local_folder, exist_ok=True)
+                self.notify_observers()
 
             # List the contents of the remote directory
             directory_contents = self.sftp_listdir(source_directory)
@@ -381,7 +384,7 @@ class RemoteFileBrowser(FileBrowser):
                     job_id = create_random_integer()
 
                     queue_item = QueueItem( os.path.basename(entry_path), job_id )
-                    queue_display_append(queue_item)
+                    # queue_display_append(queue_item)
                     ic()
                     ic(job_id)
                     add_sftp_job(entry_path, True, local_entry_path, False, self.init_hostname, self.init_username, self.init_password, self.init_port, "download", job_id)

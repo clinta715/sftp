@@ -631,11 +631,12 @@ class Browser(QWidget):
         current_browser = self.focusWidget()
 
         if current_browser is not None and isinstance(current_browser, QTableView):
-            index = current_browser.currentIndex()
-            # what thing did they click in that browser
-            if index.isValid():
-                # and now, what is that thing?!
-                selected_item_text = current_browser.model().data(index, Qt.DisplayRole)
+            indexes = current_browser.selectedIndexes()
+            # Process each selected item in the browser
+            for index in indexes:
+                if index.isValid() or self.is_complete_path(index):
+                    # What is that thing?!
+                    selected_item_text = current_browser.model().data(index, Qt.DisplayRole)
 
                 if selected_item_text:
                     # Construct the full path of the selected item
@@ -669,7 +670,7 @@ class Browser(QWidget):
                 else:
                     self.message_signal.emit("Invalid item or empty path.")
             else:
-                self.message_signal.emit("No item selected or invalid index.")
+                self.message_signal.emit("No valid items selected.")
         else:
             self.message_signal.emit("Current browser is not a valid QTableView.")
 
@@ -719,7 +720,7 @@ class Browser(QWidget):
 
                 if os.path.isdir(entry_path):
                     queue_item = QueueItem( os.path.basename(entry_path), job_id )
-                    queue_display_append(queue_item)
+                    # queue_display_append(queue_item)
                     self.sftp_mkdir(remote_entry_path)
                     self.get_files()
                     self.upload_directory(entry_path, remote_entry_path)
@@ -727,7 +728,7 @@ class Browser(QWidget):
                     self.message_signal.emit(f"{entry_path}, {remote_entry_path}")
 
                     queue_item = QueueItem( os.path.basename(entry_path), job_id )
-                    queue_display_append(queue_item)
+                    # queue_display_append(queue_item)
 
                     add_sftp_job(entry_path, False, remote_entry_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "upload", job_id)
 
