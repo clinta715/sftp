@@ -14,7 +14,31 @@ class BackgroundThreadWindow(QMainWindow):
         super(BackgroundThreadWindow, self).__init__()
         self.active_transfers = 0
         self.transfers = []
+        self.observees = []
         self.init_ui()
+
+    def add_observee(self,observee):
+        if observee not in self.observees:
+            self.observees.append(observee)
+            ic("Observee added:", observee)
+        else:
+            ic("Observee already exists:", observee)
+
+    def remove_observee(self,observee):
+        if observee in self.observees:
+            self.observees.remove(observee)
+            ic("Observer removed:", observee)
+
+    def notify_observees(self):
+            ic()
+            for observee in self.observees:
+                try:
+                    observee.get_files()  # Notify the observer by calling its update method
+                    ic("Observee notified:", observee)
+                except AttributeError as ae:
+                    ic("Observee", observee, "does not implement 'get_files' method.", ae)
+                except Exception as e:
+                    ic("An error occurred while notifying observee", observee, e)
 
     def init_ui(self):
         size_policy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -173,6 +197,8 @@ class BackgroundThreadWindow(QMainWindow):
         self.remove_queue_item_by_id(transfer.download_worker.job_source)
         self.populate_queue_list()
         self.active_transfers -= 1
+        if transfer.download_worker.command == "upload" or transfer.download_worker.command == "download":
+            self.notify_observees()
 
     def update_text_console(self, transfer_id, message):
         if message:

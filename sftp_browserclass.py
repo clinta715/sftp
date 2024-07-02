@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QTableView, QApplication, QWidget, QVBoxLayout, QLabel, QFileDialog, QMessageBox, QInputDialog, QMenu, QHeaderView, QProgressBar, QSizePolicy
-from PyQt5.QtCore import pyqtSignal, QTimer, Qt, QEventLoop
+from PyQt5.QtCore import pyqtSignal, QTimer, Qt, QEventLoop, QModelIndex
 from PyQt5 import QtCore
 from stat import S_ISDIR
 import stat
@@ -625,15 +625,53 @@ class Browser(QWidget):
             menu.exec_(current_browser.mapToGlobal(point))
 
     def upload_download(self):
-        # based on what the user clicked, let's decide if it's a local file needing uploading or a remote file needing downloading
-        # if we're being run, it means we are local, in FileBrowser, otherwise we'd be overloaded by RemoteFileBrowser
+        ic()
         creds = get_credentials(self.session_id)
 
         current_browser = self.focusWidget()
-        # did they click the local or remote browser
 
         if current_browser is not None and isinstance(current_browser, QTableView):
             indexes = current_browser.selectedIndexes()
+<<<<<<< HEAD
+            has_valid_item = False  # Track if any valid items were found
+
+            for index in indexes:
+                ic(index)
+                selected_item_text = ""
+
+                if isinstance(index, QModelIndex):
+                    if index.isValid():
+                        selected_item_text = current_browser.model().data(index, Qt.DisplayRole)
+                elif isinstance(index, str):
+                    selected_item_text = index
+
+                if selected_item_text:
+                    # Construct the full path of the selected item
+                    if not self.is_complete_path(selected_item_text):
+                        selected_path = os.path.join(creds.get('current_local_directory'), selected_item_text)
+                    else:
+                        selected_path = self.normalize_path(selected_item_text)
+
+                    try:
+                        remote_entry_path = self.get_normalized_remote_path(creds.get('current_remote_directory'), selected_item_text)
+
+                        if os.path.isdir(selected_path):
+                            self.message_signal.emit(f"Uploading directory: {selected_path}")
+                            self.upload_directory(selected_path, remote_entry_path)
+                        else:
+                            self.message_signal.emit(f"Uploading file: {selected_path}")
+                            job_id = create_random_integer()
+                            queue_item = QueueItem(os.path.basename(selected_path), job_id)
+                            # queue_display.append(queue_item)
+                            add_sftp_job(selected_path, False, remote_entry_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "upload", job_id)
+                        has_valid_item = True  # Mark as valid item found
+                    except Exception as e:
+                        self.message_signal.emit(f"upload_download() encountered an error: {e}")
+                else:
+                    self.message_signal.emit("Invalid item or empty path.")
+            
+            if not has_valid_item:
+=======
             # Process each selected item in the browser
             for index in indexes:
                 if index.isValid() or self.is_complete_path(index):
@@ -668,6 +706,7 @@ class Browser(QWidget):
                     else:
                         self.message_signal.emit("Invalid item or empty path.")
             else:
+>>>>>>> 5761eade37b713f18fd2a98f45ff2ae0a5590f31
                 self.message_signal.emit("No valid items selected.")
         else:
             self.message_signal.emit("Current browser is not a valid QTableView.")
@@ -700,6 +739,7 @@ class Browser(QWidget):
             else:
                 try:
                     success = self.sftp_mkdir(remote_folder) 
+                    self.notify_observers()                    
                     if not success or self.always_continue_upload:
                         self.message_signal.emit(f"sftp_mkdir() error creating {remote_folder} but always_continue_upload is {self.always_continue_upload}")
                         return
@@ -717,19 +757,29 @@ class Browser(QWidget):
 
                 if os.path.isdir(entry_path):
                     queue_item = QueueItem( os.path.basename(entry_path), job_id )
+<<<<<<< HEAD
+=======
                     # queue_display_append(queue_item)
+>>>>>>> 5761eade37b713f18fd2a98f45ff2ae0a5590f31
                     self.sftp_mkdir(remote_entry_path)
+                    self.get_files()
                     self.upload_directory(entry_path, remote_entry_path)
                 else:
                     self.message_signal.emit(f"{entry_path}, {remote_entry_path}")
 
                     queue_item = QueueItem( os.path.basename(entry_path), job_id )
+<<<<<<< HEAD
+=======
                     # queue_display_append(queue_item)
+>>>>>>> 5761eade37b713f18fd2a98f45ff2ae0a5590f31
 
                     add_sftp_job(entry_path, False, remote_entry_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "upload", job_id)
 
         except Exception as e:
             self.message_signal.emit(f"upload_directory() {e}")
+        
+        finally:
+            self.notify_observers()
 
     def show_prompt_dialog(self, text, title):
         dialog = QMessageBox(self.parent())
