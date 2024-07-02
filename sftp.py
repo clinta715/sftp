@@ -152,6 +152,8 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
 
         self.left_browser.add_observer(self.right_browser)
         self.right_browser.add_observer(self.left_browser)
+        self.backgroundThreadWindow.add_observee(self.right_browser)
+        self.backgroundThreadWindow.add_observee(self.left_browser)
 
         # Create the main layout
         main_layout = QVBoxLayout()
@@ -171,6 +173,8 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
 
         # Delete the widget if necessary
         widget_to_remove.deleteLater()
+        self.backgroundThreadWindow.remove_observee(self.left_browser)
+        self.backgroundThreadWindow.remove_observee(self.right_browser)
 
     def setup_left_browser(self, session_id):
         self.session_id = session_id

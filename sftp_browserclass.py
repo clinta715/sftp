@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QTableView, QApplication, QWidget, QVBoxLayout, QLabel, QFileDialog, QMessageBox, QInputDialog, QMenu, QHeaderView, QProgressBar, QSizePolicy
-from PyQt5.QtCore import pyqtSignal, QTimer, Qt, QEventLoop
+from PyQt5.QtCore import pyqtSignal, QTimer, Qt, QEventLoop, QModelIndex
 from PyQt5 import QtCore
 from stat import S_ISDIR
 import stat
@@ -9,7 +9,7 @@ from pathlib import Path
 
 from sftp_creds import get_credentials, create_random_integer, set_credentials
 from sftp_downloadworkerclass import create_response_queue, delete_response_queue, check_response_queue, add_sftp_job, QueueItem, queue
-from sftp_backgroundthreadwindow import queue_display_append
+# from sftp_backgroundthreadwindow import queue_display_append
 
 class Browser(QWidget):
     def __init__(self, title, session_id, parent=None):
@@ -91,7 +91,7 @@ class Browser(QWidget):
             ic()
             for observer in self.observers:
                 try:
-                    self.observer.get_files()  # Notify the observer by calling its update method
+                    observer.get_files()  # Notify the observer by calling its update method
                     ic("Observer notified:", observer)
                 except AttributeError as ae:
                     ic("Observer", observer, "does not implement 'get_files' method.", ae)
@@ -532,6 +532,27 @@ class Browser(QWidget):
                 self.model.get_files()
                 self.notify_observers()
 
+    def change_directory_handler(self):
+        selected_path, ok = QInputDialog.getText(self, 'Input Dialog', 'Enter directory name:')
+
+        if not ok:
+            return
+
+        try:
+            is_directory = os.path.isdir(selected_path)
+
+            if is_directory:
+                # Call the method to change the directory
+                self.change_directory(selected_path)
+
+        except Exception as e:
+            # Append error message to the output_console
+            self.message_signal.emit(f"change_directory_handler() {e}")
+
+        finally:
+            self.model.get_files()
+            self.notify_observers()
+
     def change_directory(self, path ):
         # this is a function to change the current LOCAL working directory, it also uses this moment to refresh the local file list
 
@@ -604,53 +625,52 @@ class Browser(QWidget):
             menu.exec_(current_browser.mapToGlobal(point))
 
     def upload_download(self):
-        # based on what the user clicked, let's decide if it's a local file needing uploading or a remote file needing downloading
-        # if we're being run, it means we are local, in FileBrowser, otherwise we'd be overloaded by RemoteFileBrowser
+        ic()
         creds = get_credentials(self.session_id)
 
         current_browser = self.focusWidget()
-        # did they click the local or remote browser
 
         if current_browser is not None and isinstance(current_browser, QTableView):
-            index = current_browser.currentIndex()
-            # what thing did they click in that browser
-            if index.isValid():
-                # and now, what is that thing?!
-                selected_item_text = current_browser.model().data(index, Qt.DisplayRole)
+            indexes = current_browser.selectedIndexes()
+            has_valid_item = False  # Track if any valid items were found
+
+            for index in indexes:
+                ic(index)
+                selected_item_text = ""
+
+                if isinstance(index, QModelIndex):
+                    if index.isValid():
+                        selected_item_text = current_browser.model().data(index, Qt.DisplayRole)
+                elif isinstance(index, str):
+                    selected_item_text = index
 
                 if selected_item_text:
                     # Construct the full path of the selected item
-                    # selected_path = os.path.join(creds.get('current_local_directory'), selected_item_text)
-                    if not self.is_complete_path( selected_item_text):
-                        selected_path = os.path.join( creds.get('current_local_directory'), selected_item_text )
+                    if not self.is_complete_path(selected_item_text):
+                        selected_path = os.path.join(creds.get('current_local_directory'), selected_item_text)
                     else:
-                        selected_path = self.normalize_path( selected_item_text )
+                        selected_path = self.normalize_path(selected_item_text)
 
                     try:
-                        remote_entry_path = self.get_normalized_remote_path( creds.get('current_remote_directory'), selected_item_text )
-                        # ic(remote_entry_path, selected_item_text, selected_path)
-                        # construct a path for the remote destination
+                        remote_entry_path = self.get_normalized_remote_path(creds.get('current_remote_directory'), selected_item_text)
 
                         if os.path.isdir(selected_path):
-                            # Upload a local directory to the remote server
                             self.message_signal.emit(f"Uploading directory: {selected_path}")
                             self.upload_directory(selected_path, remote_entry_path)
                         else:
-                            # Upload a local file to the remote server
                             self.message_signal.emit(f"Uploading file: {selected_path}")
                             job_id = create_random_integer()
                             queue_item = QueueItem(os.path.basename(selected_path), job_id)
                             # queue_display.append(queue_item)
-                            queue_display_append(queue_item)
-
-                            # Assuming add_sftp_job handles the actual upload process
                             add_sftp_job(selected_path, False, remote_entry_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "upload", job_id)
+                        has_valid_item = True  # Mark as valid item found
                     except Exception as e:
-                        self.message_signal.emit(f"upload_download() {e}")
+                        self.message_signal.emit(f"upload_download() encountered an error: {e}")
                 else:
                     self.message_signal.emit("Invalid item or empty path.")
-            else:
-                self.message_signal.emit("No item selected or invalid index.")
+            
+            if not has_valid_item:
+                self.message_signal.emit("No valid items selected.")
         else:
             self.message_signal.emit("Current browser is not a valid QTableView.")
 
@@ -682,6 +702,7 @@ class Browser(QWidget):
             else:
                 try:
                     success = self.sftp_mkdir(remote_folder) 
+                    self.notify_observers()                    
                     if not success or self.always_continue_upload:
                         self.message_signal.emit(f"sftp_mkdir() error creating {remote_folder} but always_continue_upload is {self.always_continue_upload}")
                         return
@@ -699,19 +720,21 @@ class Browser(QWidget):
 
                 if os.path.isdir(entry_path):
                     queue_item = QueueItem( os.path.basename(entry_path), job_id )
-                    queue_display_append(queue_item)
                     self.sftp_mkdir(remote_entry_path)
+                    self.get_files()
                     self.upload_directory(entry_path, remote_entry_path)
                 else:
                     self.message_signal.emit(f"{entry_path}, {remote_entry_path}")
 
                     queue_item = QueueItem( os.path.basename(entry_path), job_id )
-                    queue_display_append(queue_item)
 
                     add_sftp_job(entry_path, False, remote_entry_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "upload", job_id)
 
         except Exception as e:
             self.message_signal.emit(f"upload_directory() {e}")
+        
+        finally:
+            self.notify_observers()
 
     def show_prompt_dialog(self, text, title):
         dialog = QMessageBox(self.parent())
@@ -748,24 +771,4 @@ class Browser(QWidget):
         finally:
             delete_response_queue(job_id)
             return exist
-
-    def change_directory_handler(self):
-        selected_path, ok = QInputDialog.getText(self, 'Input Dialog', 'Enter directory name:')
-
-        if not ok:
-            return
-
-        try:
-            is_directory = os.path.isdir(selected_path)
-
-            if is_directory:
-                # Call the method to change the directory
-                self.change_directory(selected_path)
-
-        except Exception as e:
-            # Append error message to the output_console
-            self.message_signal.emit(f"change_directory_handler() {e}")
-
-        finally:
-            self.model.get_files()
-            self.notify_observers()
+        
