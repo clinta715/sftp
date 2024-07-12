@@ -26,7 +26,8 @@ class FileBrowser(Browser):
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         # ic("file browser init completed")
 
-    def remove_directory_with_prompt(self, local_path=None):
+    def remove_directory_with_prompt(self, local_path=None, always=0):
+        self.always = always
         creds = get_credentials( self.session_id )
         
         # for removing LOCAL directories
@@ -61,15 +62,18 @@ class FileBrowser(Browser):
             subdirectories = [entry for entry in directory_contents if os.path.isdir(os.path.join(local_path, entry))]
             files = [entry for entry in directory_contents if os.path.isfile(os.path.join(local_path, entry))]
 
-            if subdirectories or files:
+            if subdirectories or files and not self.always:
                 # Directory has child items, prompt for confirmation using QMessageBox
                 response = QMessageBox.question(
                     None,
                     'Confirmation',
                     f"The directory '{local_path}' contains subdirectories or files. Do you want to remove them all?",
-                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes | QMessageBox.No | QMessageBox.YesToAll,
                     QMessageBox.No
                 )
+
+                if response == QMessageBox.YesToAll:
+                    self.always = 1
 
                 if response == QMessageBox.No:
                     return
@@ -77,7 +81,7 @@ class FileBrowser(Browser):
                 # Recursively remove subdirectories
                 for entry in subdirectories:
                     entry_path = os.path.join(local_path, entry)
-                    self.remove_directory_with_prompt(entry_path)
+                    self.remove_directory_with_prompt(entry_path, self.always)
 
                 # Remove files
                 for entry in files:

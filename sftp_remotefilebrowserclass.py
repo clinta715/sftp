@@ -180,7 +180,8 @@ class RemoteFileBrowser(FileBrowser):
         else:
             return s
 
-    def remove_directory_with_prompt(self, remote_path=None):
+    def remove_directory_with_prompt(self, remote_path=None, always=0):
+        self.always = always
         creds = get_credentials(self.session_id)
 
         if remote_path == None or remote_path == False:
@@ -212,9 +213,12 @@ class RemoteFileBrowser(FileBrowser):
                     None,
                     'Confirmation',
                     f"The directory '{remote_path}' contains subdirectories or files. Do you want to remove them all?",
-                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes | QMessageBox.No | QMessageBox.YesToAll,
                     QMessageBox.No
                 )
+
+                if response == QMessageBox.YesToAll:
+                    self.always = 1
 
                 if response == QMessageBox.No:
                     return
@@ -229,7 +233,7 @@ class RemoteFileBrowser(FileBrowser):
             for entry in subdirectories:
                 entry_path = os.path.join(remote_path, entry.filename)
                 self.message_signal.emit(f"Recursing into subdirectory: {entry_path}")
-                self.remove_directory_with_prompt(entry_path)
+                self.remove_directory_with_prompt(entry_path, self.always)
 
             # Remove the directory
             self.sftp_rmdir(remote_path)
@@ -255,56 +259,67 @@ class RemoteFileBrowser(FileBrowser):
 
         if current_browser is not None and isinstance(current_browser, QTableView):
             indexes = current_browser.selectedIndexes()
+            has_valid_item = False  # Track if we found any valid items
             
             for index in indexes:
-                if index.isValid():
-                    selected_item_text = optionalpath if optionalpath else current_browser.model().data(index, Qt.DisplayRole)
-                    
-                    if selected_item_text:
-                        try:
-                            # Normalize the selected path
-                            if not self.is_complete_path(selected_item_text):
-                                entry_path = self.get_normalized_remote_path(current_remote_directory, selected_item_text)
-                            else:
-                                entry_path = self.get_normalized_remote_path(selected_item_text)
+                selected_item_text = ""
 
-                        # Determine the local path
-                        local_base_path = creds.get('current_local_directory')
+                if isinstance(index, QModelIndex):
+                    if index.isValid():
+                        selected_item_text = current_browser.model().data(index, Qt.DisplayRole)
+                elif isinstance(index, str):
+                    selected_item_text = index
+
+                if optionalpath:
+                    selected_item_text = optionalpath
+
+                if selected_item_text:
+                    try:
                         if not self.is_complete_path(selected_item_text):
-                            local_path = os.path.join(local_base_path, os.path.basename(selected_item_text))
+                            # ic(selected_item_text)
+                            remote_entry_path = self.get_normalized_remote_path(current_remote_directory, selected_item_text)
                         else:
-                            local_path = self.normalize_path(selected_item_text)
+                            remote_entry_path = self.get_normalized_remote_path(selected_item_text)
 
-                            ic(entry_path)
-                            
-                            if self.is_remote_directory(entry_path):
-                                ic(entry_path, local_path)
-                                # Download the directory
-                                self.download_directory(entry_path, local_path)
-                            else:
-                                # Download the file
-                                job_id = create_random_integer()
-                                queue_item = QueueItem(entry_path, job_id)
-                                # queue_display_append(queue_item)
-                                ic(entry_path, local_path)
-                                ic(job_id)
-                                add_sftp_job(entry_path, True, local_path, False, 
-                                            self.init_hostname, self.init_username, 
-                                            self.init_password, self.init_port, 
-                                            "download", job_id)
-                        except Exception as e:
-                            error_message = f"upload_download() encountered an error: {str(e)}"
-                            self.message_signal.emit(error_message)
-                            ic(e)
-                    else:
-                        self.message_signal.emit("No valid path provided.")
+                        local_base_path = creds.get('current_local_directory')
+                        local_entry_path = os.path.join( local_base_path, selected_item_text)
+
+                        ic(selected_item_text)
+                        ic(remote_entry_path)
+                        ic(local_base_path)
+                        ic(local_entry_path)
+
+                        if self.is_remote_directory(remote_entry_path):
+                            ic(remote_entry_path)
+                            # if its a remote directory, we establish its path selected_item+remote path
+                            # then we download it to current local directory + selected_item_text (?)
+                            ic(local_entry_path)
+                            self.download_directory(remote_entry_path, local_entry_path)
+                        else:
+                            job_id = create_random_integer()
+                            queue_item = QueueItem(remote_entry_path, job_id)
+                            ic(remote_entry_path, local_entry_path)
+                            ic(job_id)
+                            add_sftp_job(remote_entry_path, True, local_entry_path, False, 
+                                        self.init_hostname, self.init_username, 
+                                        self.init_password, self.init_port, 
+                                        "download", job_id)
+                        has_valid_item = True  # Mark as valid item found
+                    except Exception as e:
+                        error_message = f"upload_download() encountered an error: {str(e)}"
+                        self.message_signal.emit(error_message)
+                        ic(e)
                 else:
-                    self.message_signal.emit("No item selected or invalid index.")
+                    self.message_signal.emit("No valid path provided.")
+            
+            if not has_valid_item:
+                self.message_signal.emit("No valid items selected.")
         else:
             self.message_signal.emit("Current browser is not a valid QTableView.")
 
-    def download_directory(self, source_directory, destination_directory):
+    def download_directory(self, source_directory, destination_directory, always=0):
         ic()
+        self.always = always
 
         try:
             # Create a local folder with the same name as the remote folder
@@ -314,28 +329,32 @@ class RemoteFileBrowser(FileBrowser):
 
             if os.path.exists(local_folder):
                 # Check if 'always' option was selected before
-                if self.user_choice == 'always':
-                    pass
+                
                 # If not, show the dialog with 'always' option
-                response = QMessageBox.question(
-                    self,
-                    'Folder Exists',
-                    f"The folder '{local_folder}' already exists. Do you want to proceed?",
-                    QMessageBox.Yes | QMessageBox.No | QMessageBox.YesToAll,
-                    QMessageBox.No
-                )
-                if response == QMessageBox.YesToAll:
-                    self.user_choice = 'always'
-                elif response == QMessageBox.No:
-                    return
+                ic(self.always)
+                if not self.always:
+                    response = QMessageBox.question(
+                        self,
+                        'Folder Exists',
+                        f"The folder '{local_folder}' already exists. Do you want to proceed?",
+                        QMessageBox.Yes | QMessageBox.No | QMessageBox.YesToAll,
+                        QMessageBox.No
+                    )
+
+                    if response == QMessageBox.YesToAll:
+                        self.always = 1
+
+                    elif response == QMessageBox.No:
+                        return
             else:
                 self.message_signal.emit(f"mkdir {local_folder}")
                 os.makedirs(local_folder, exist_ok=True)
-                self.notify_observers()
+                # creating a local directory, let local browser know to update its contents
+                # self.notify_observers()
 
             # List the contents of the remote directory
             directory_contents = self.sftp_listdir(source_directory)
-            ic(directory_contents)
+            # ic(directory_contents)
 
             # Download files and recurse into subdirectories
             for entry in directory_contents:
@@ -345,11 +364,11 @@ class RemoteFileBrowser(FileBrowser):
                 local_entry_path = os.path.join(local_folder, entry)
 
                 # If it's a directory, recursively download its contents
-                ic()
-                ic(entry_path)
+                # ic()
+                ic(local_entry_path)
                 if self.is_remote_directory(entry_path):
                     self.message_signal.emit(f"download_directory() {entry_path}, {local_folder}")
-                    self.download_directory(entry_path, local_folder)
+                    self.download_directory(entry_path, local_folder, self.always)
                     # local directory view needs to be updated with downloaded folder
                     # self.notify_observers()
                 else:
@@ -357,26 +376,24 @@ class RemoteFileBrowser(FileBrowser):
                     self.message_signal.emit(f"download_directory() {entry_path}, {local_entry_path}")
 
                     if os.path.exists(local_entry_path):
-                        if self.user_choice == 'always':
-                            pass
-                            # If not, show the dialog with 'always' option
-                        
                         # changed indent here after noting the 'pass' statement above... 
-                        response = QMessageBox.question(
+                        if not self.always:
+                            response = QMessageBox.question(
                             self,
                             'Folder Exists',
                             f"The folder '{local_folder}' already exists. Do you want to proceed?",
                             QMessageBox.Yes | QMessageBox.No | QMessageBox.YesToAll,
                             QMessageBox.No
-                        )
-                        if response == QMessageBox.YesToAll:
-                            self.user_choice = 'always'
-                        elif response == QMessageBox.No:
-                            return
+                            )
+    
+                            if response == QMessageBox.YesToAll:
+                                self.always = 1
+                            elif response == QMessageBox.No:
+                                return
+                   
                     try:
                         os.remove(local_entry_path)
                         # local directory view needs to be updated with removed folder
-                        # self.notify_observers()
                     except Exception as e:
                         pass
 
@@ -384,8 +401,7 @@ class RemoteFileBrowser(FileBrowser):
                     job_id = create_random_integer()
 
                     queue_item = QueueItem( os.path.basename(entry_path), job_id )
-                    # queue_display_append(queue_item)
-                    ic()
+                    # ic()
                     ic(job_id)
                     add_sftp_job(entry_path, True, local_entry_path, False, self.init_hostname, self.init_username, self.init_password, self.init_port, "download", job_id)
 

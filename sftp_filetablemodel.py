@@ -14,7 +14,7 @@ class FileTableModel(QAbstractTableModel):
         self.session_id = session_id
         # Convert string to Path object if necessary
         creds = get_credentials(self.session_id)
-        ic("init filetablemodel")
+        # ic("init filetablemodel")
 
         set_credentials(self.session_id, 'current_local_directory', os.getcwd())
         self.directory = Path(creds.get('current_local_directory'))
@@ -29,12 +29,12 @@ class FileTableModel(QAbstractTableModel):
         ic()
         creds = get_credentials(self.session_id)
 
-        ic("FileTableModel get files")
+        # ic("FileTableModel get files")
         self.directory = Path(creds.get('current_local_directory'))
 
         # List all files and directories in the specified path
         items = list(self.directory.iterdir())
-        ic(items)
+        # ic(items)
 
         # Prepare a list to store file information
         self.beginResetModel()

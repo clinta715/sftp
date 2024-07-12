@@ -104,7 +104,7 @@ class RemoteFileTableModel(QAbstractTableModel):
         ic()
         # ic("remote file table model get files")
         creds = get_credentials(self.session_id)
-        ic(creds)
+        # ic(creds)
         """
         Fetches file attributes from the specified path using the given SFTP connection.
         :param sftp: Paramiko SFTP client object
@@ -112,7 +112,7 @@ class RemoteFileTableModel(QAbstractTableModel):
         """
         # List all files and directories in the specified path
         items = self.sftp_listdir_attr(creds.get('current_remote_directory'))
-        ic(items)
+        # ic(items)
         # Clear the existing file list
         # Inform the view that the model is about to be reset
         self.beginResetModel()

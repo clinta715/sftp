@@ -1,6 +1,8 @@
 import sys
 import base64
 import os
+import qdarktheme
+
 from icecream import ic
 from PyQt5.QtWidgets import QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QTextEdit, QCompleter, QComboBox, QSpinBox,QTabWidget
 from PyQt5.QtCore import pyqtSignal, QObject, QCoreApplication, Qt
@@ -442,7 +444,8 @@ def main():
             hide_transfers_window.transfers_hidden = 0
 
     app = QApplication(sys.argv)
-    app.setStyle('Fusion')
+    # app.setStyle('Fusion')
+    qdarktheme.setup_theme()
 
     # create the window we show the statuses of active transfers in, this is for downloads/uploads but also any background event like fetching a directory listing etc
     background_thread_window = BackgroundThreadWindow()

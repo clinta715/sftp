@@ -632,59 +632,58 @@ class Browser(QWidget):
 
         if current_browser is not None and isinstance(current_browser, QTableView):
             indexes = current_browser.selectedIndexes()
-            # Process each selected item in the browser
+            has_valid_item = False  # Track if any valid items were found
+
             for index in indexes:
-                if index.isValid() or self.is_complete_path(index):
-                    # What is that thing?!
-                    selected_item_text = current_browser.model().data(index, Qt.DisplayRole)
+                ic(index)
+                selected_item_text = ""
+
+                if isinstance(index, QModelIndex):
+                    if index.isValid():
+                        selected_item_text = current_browser.model().data(index, Qt.DisplayRole)
+                elif isinstance(index, str):
+                    selected_item_text = index
 
                 if selected_item_text:
                     # Construct the full path of the selected item
-                    # selected_path = os.path.join(creds.get('current_local_directory'), selected_item_text)
-                    if not self.is_complete_path( selected_item_text):
-                        selected_path = os.path.join( creds.get('current_local_directory'), selected_item_text )
+                    if not self.is_complete_path(selected_item_text):
+                        selected_path = os.path.join(creds.get('current_local_directory'), selected_item_text)
                     else:
-                        selected_path = self.normalize_path( selected_item_text )
+                        selected_path = self.normalize_path(selected_item_text)
 
                     try:
-                        remote_entry_path = self.get_normalized_remote_path( creds.get('current_remote_directory'), selected_item_text )
-                        # ic(remote_entry_path, selected_item_text, selected_path)
-                        # construct a path for the remote destination
+                        remote_entry_path = self.get_normalized_remote_path(creds.get('current_remote_directory'), selected_item_text)
 
                         if os.path.isdir(selected_path):
-                            # Upload a local directory to the remote server
                             self.message_signal.emit(f"Uploading directory: {selected_path}")
                             self.upload_directory(selected_path, remote_entry_path)
                         else:
-                            # Upload a local file to the remote server
                             self.message_signal.emit(f"Uploading file: {selected_path}")
                             job_id = create_random_integer()
                             queue_item = QueueItem(os.path.basename(selected_path), job_id)
                             # queue_display.append(queue_item)
-                            queue_display_append(queue_item)
-
-                            # Assuming add_sftp_job handles the actual upload process
                             add_sftp_job(selected_path, False, remote_entry_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "upload", job_id)
+                        has_valid_item = True  # Mark as valid item found
                     except Exception as e:
-                        self.message_signal.emit(f"upload_download() {e}")
+                        self.message_signal.emit(f"upload_download() encountered an error: {e}")
                 else:
                     self.message_signal.emit("Invalid item or empty path.")
-            else:
+            
+            if not has_valid_item:
                 self.message_signal.emit("No valid items selected.")
         else:
             self.message_signal.emit("Current browser is not a valid QTableView.")
 
-    def upload_directory(self, source_directory, destination_directory):
+    def upload_directory(self, source_directory, destination_directory, always=0):
+        self.always = always
         creds = get_credentials(self.session_id)
-
-        self.always_continue_upload = False
 
         try:
             remote_folder = destination_directory
 
             target_exists = self.sftp_exists(remote_folder)
 
-            if target_exists and self.is_remote_directory(remote_folder) and not self.always_continue_upload:
+            if target_exists and self.is_remote_directory(remote_folder) and not self.always:
                 response = self.show_prompt_dialog(f"The folder {remote_folder} already exists. Do you want to continue uploading?", "Upload Confirmation")
 
                 if response == QMessageBox.No:
@@ -695,7 +694,7 @@ class Browser(QWidget):
                     pass  # Continue with the upload
                 elif response == QMessageBox.YesToAll:
                     # User chose to always continue
-                    self.always_continue_upload = True
+                    self.always = 1
                 else:
                     # User closed the dialog
                     return
@@ -720,15 +719,13 @@ class Browser(QWidget):
 
                 if os.path.isdir(entry_path):
                     queue_item = QueueItem( os.path.basename(entry_path), job_id )
-                    # queue_display_append(queue_item)
                     self.sftp_mkdir(remote_entry_path)
                     self.get_files()
-                    self.upload_directory(entry_path, remote_entry_path)
+                    self.upload_directory(entry_path, remote_entry_path, self.always)
                 else:
                     self.message_signal.emit(f"{entry_path}, {remote_entry_path}")
 
                     queue_item = QueueItem( os.path.basename(entry_path), job_id )
-                    # queue_display_append(queue_item)
 
                     add_sftp_job(entry_path, False, remote_entry_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "upload", job_id)
 
@@ -773,5 +770,4 @@ class Browser(QWidget):
         finally:
             delete_response_queue(job_id)
             return exist
-
         
