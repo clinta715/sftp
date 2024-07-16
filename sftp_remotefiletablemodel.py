@@ -12,7 +12,6 @@ class RemoteFileTableModel(QAbstractTableModel):
         self.session_id = session_id
         self.file_list = []  # Initialize as an empty list
         self.column_names = ['Name', 'Size', 'Permissions', 'Modified']
-        # ic("remote file table model init")
         self.get_files()
 
     def is_remote_browser(self):
@@ -101,10 +100,7 @@ class RemoteFileTableModel(QAbstractTableModel):
         self.layoutChanged.emit()
 
     def get_files(self):
-        ic()
-        # ic("remote file table model get files")
         creds = get_credentials(self.session_id)
-        # ic(creds)
         """
         Fetches file attributes from the specified path using the given SFTP connection.
         :param sftp: Paramiko SFTP client object
@@ -112,7 +108,6 @@ class RemoteFileTableModel(QAbstractTableModel):
         """
         # List all files and directories in the specified path
         items = self.sftp_listdir_attr(creds.get('current_remote_directory'))
-        # ic(items)
         # Clear the existing file list
         # Inform the view that the model is about to be reset
         self.beginResetModel()
@@ -168,8 +163,6 @@ class RemoteFileTableModel(QAbstractTableModel):
         job_id = create_random_integer()
         queue = create_response_queue( job_id )
 
-        ic()
-        ic(remote_path)
         # the slashes/backslashes stuff is an attempt at windows compatibility
         try:
             add_sftp_job(remote_path, True, remote_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "listdir_attr", job_id )
@@ -192,7 +185,6 @@ class RemoteFileTableModel(QAbstractTableModel):
             f = True
 
         delete_response_queue(job_id)
-        ic()
         if f:
             return list
         else:

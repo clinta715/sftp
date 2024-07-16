@@ -275,7 +275,7 @@ class RemoteFileBrowser(FileBrowser):
 
                 if selected_item_text:
                     try:
-                        if not self.is_complete_path(selected_item_text):
+                        if optionalpath == None:
                             # ic(selected_item_text)
                             remote_entry_path = self.get_normalized_remote_path(current_remote_directory, selected_item_text)
                         else:
@@ -345,6 +345,7 @@ class RemoteFileBrowser(FileBrowser):
                         self.always = 1
 
                     elif response == QMessageBox.No:
+                        self.always = 0
                         return
             else:
                 self.message_signal.emit(f"mkdir {local_folder}")

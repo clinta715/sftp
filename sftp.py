@@ -1,7 +1,7 @@
 import sys
 import base64
 import os
-import qdarktheme
+# import qdarktheme
 
 from icecream import ic
 from PyQt5.QtWidgets import QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QTextEdit, QCompleter, QComboBox, QSpinBox,QTabWidget
@@ -148,7 +148,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         # Create a layout for the browsers
         browser_layout = QHBoxLayout()
         
-        # print("prepare container widget-left browser open")
         browser_layout.addWidget(self.left_browser)
         browser_layout.addWidget(self.right_browser)
 
@@ -184,9 +183,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         set_credentials(self.session_id, 'current_local_directory', os.getcwd())
 
         try:
-            # ic("setup_left_browser try create filebrowser")
             self.left_browser = FileBrowser("Local Files", self.session_id)
-            # ic(self.left_browser)
             self.left_browser.table.setFocusPolicy(Qt.StrongFocus)
             self.left_browser.message_signal.connect(self.update_console)
             self.container_layout.addWidget(self.left_browser)
@@ -380,7 +377,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
                 return
             self.temp_password = password
 
-        ic("set_credentials")
         ic(self.session_id)
         ic(self.temp_password)
         set_credentials( self.session_id, 'password', self.temp_password)
@@ -445,7 +441,7 @@ def main():
 
     app = QApplication(sys.argv)
     # app.setStyle('Fusion')
-    qdarktheme.setup_theme()
+    # qdarktheme.setup_theme()
 
     # create the window we show the statuses of active transfers in, this is for downloads/uploads but also any background event like fetching a directory listing etc
     background_thread_window = BackgroundThreadWindow()
