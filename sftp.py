@@ -1,6 +1,7 @@
 import sys
 import base64
 import os
+import argparse
 # import qdarktheme
 
 from icecream import ic
@@ -426,6 +427,14 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         add_sftp_job(".", False, ".", False, "localhost", "guest", "guest", 69, "end", 69)
 
 def main():
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="FTP/SFTP Client")
+    parser.add_argument("-H", "--hostname", help="Initial hostname to connect to")
+    parser.add_argument("-u", "--username", help="Username for the connection")
+    parser.add_argument("-p", "--password", help="Password for the connection")
+    parser.add_argument("-P", "--port", type=int, default=22, help="Port for the connection (default: 22)")
+    args = parser.parse_args()
+
     # ic.disable()
 
     def hide_transfers_window():
@@ -455,6 +464,15 @@ def main():
     main_window.show()
     main_window.backgroundThreadWindow = background_thread_window
     main_window.transfers_message.showhide.connect(hide_transfers_window)
+
+    # If command line arguments are provided, initiate the connection
+    if args.hostname:
+        main_window.connect(
+            hostname=args.hostname,
+            username=args.username or "guest",
+            password=args.password or "guest",
+            port=str(args.port)
+        )
 
     sys.exit(app.exec_())
 
