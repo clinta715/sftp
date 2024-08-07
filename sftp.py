@@ -5,7 +5,7 @@ import argparse
 # import qdarktheme
 
 from icecream import ic
-from PyQt5.QtWidgets import QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QTextEdit, QCompleter, QComboBox, QSpinBox,QTabWidget
+from PyQt5.QtWidgets import QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QTextEdit, QCompleter, QComboBox, QSpinBox, QTabWidget, QMessageBox
 from PyQt5.QtCore import pyqtSignal, QObject, QCoreApplication, Qt
 
 from sftp_downloadworkerclass import transferSignals, add_sftp_job, sftp_queue_clear
@@ -393,10 +393,14 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
             return self.session_id
 
         except ValueError as ve:
-            self.output_console.append(f"Error: {str(ve)}")
+            error_message = f"Error: {str(ve)}"
+            self.output_console.append(error_message)
+            QMessageBox.critical(self, "Connection Error", error_message)
             return None
         except Exception as e:
-            self.output_console.append(f"Unexpected error occurred: {str(e)}")
+            error_message = f"Unexpected error occurred: {str(e)}"
+            self.output_console.append(error_message)
+            QMessageBox.critical(self, "Connection Error", error_message)
             return None
 
     def create_initial_data(self):
