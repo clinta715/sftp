@@ -173,10 +173,14 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         widget_to_remove = self.tab_widget.widget(index)
         self.tab_widget.removeTab(index)
 
+        # Close SFTP connection
+        if hasattr(widget_to_remove, 'right_browser'):
+            widget_to_remove.right_browser.close_sftp_connection()
+
         # Delete the widget if necessary
         widget_to_remove.deleteLater()
-        self.backgroundThreadWindow.remove_observee(self.left_browser)
-        self.backgroundThreadWindow.remove_observee(self.right_browser)
+        self.backgroundThreadWindow.remove_observee(widget_to_remove.left_browser)
+        self.backgroundThreadWindow.remove_observee(widget_to_remove.right_browser)
 
     def setup_left_browser(self, session_id):
         self.session_id = session_id

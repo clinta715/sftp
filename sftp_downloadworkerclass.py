@@ -274,14 +274,25 @@ class DownloadWorker(QRunnable):
                         response_queues[self.transfer_id].put(e)
                         ic(e)
 
+                elif self.command == "close":
+                    try:
+                        self.sftp.close()
+                        self.ssh.close()
+                        response_queues[self.transfer_id].put("success")
+                        response_queues[self.transfer_id].put("SFTP connection closed")
+                    except Exception as e:
+                        response_queues[self.transfer_id].put("error")
+                        response_queues[self.transfer_id].put(str(e))
+
             except Exception as e:
                 self.signals.message.emit(self.transfer_id, f"{self.command} operation failed: {e}")
                 response_queues[self.transfer_id].put("error")
                 response_queues[self.transfer_id].put(e)
 
             finally:
-                self.sftp.close()
-                self.ssh.close()
+                if self.command != "close":
+                    self.sftp.close()
+                    self.ssh.close()
 
         self.signals.finished.emit(self.transfer_id)
 

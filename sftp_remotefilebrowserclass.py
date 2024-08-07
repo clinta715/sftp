@@ -28,6 +28,25 @@ class RemoteFileBrowser(FileBrowser):
     def is_remote_browser(self):
         return True
 
+    def close_sftp_connection(self):
+        creds = get_credentials(self.session_id)
+        job_id = create_random_integer()
+        queue = create_response_queue(job_id)
+
+        add_sftp_job("", True, "", True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "close", job_id)
+
+        while queue.empty():
+            self.non_blocking_sleep(100)
+        response = queue.get_nowait()
+
+        if response == "error":
+            error = queue.get_nowait()
+            self.message_signal.emit(f"Error closing SFTP connection: {error}")
+        else:
+            self.message_signal.emit("SFTP connection closed successfully")
+
+        delete_response_queue(job_id)
+
     def prompt_and_create_directory(self):
         # Prompt the user for a new directory name
         directory_name, ok = QInputDialog.getText(
