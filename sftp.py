@@ -348,56 +348,70 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         self.connect()
 
     def connect(self, hostname="localhost", username="guest", password="guest", port="22"):
-        try:
-            self.session_id = create_random_integer()
+        self.session_id = create_random_integer()
 
-            # Hostname handling
-            self.temp_hostname = self.hostname_combo.currentText() if hostname == "localhost" and self.hostname_combo.currentText() else hostname
-            if not self.temp_hostname:
-                raise ValueError("Hostname is required")
-            set_credentials(self.session_id, 'hostname', self.temp_hostname)
+        if hostname == "localhost":
+            if self.hostname_combo.currentText():
+                self.temp_hostname = self.hostname_combo.currentText()
+        else:
+            self.temp_hostname = hostname
 
-            # Username handling
-            self.temp_username = self.username.text() if username == "guest" and self.username.text() else username
-            if not self.temp_username:
-                raise ValueError("Username is required")
-            set_credentials(self.session_id, 'username', self.temp_username)
+        ic("set_credentials")
+        ic(self.session_id)
+        ic(self.temp_hostname)
+        set_credentials( self.session_id, 'hostname', self.temp_hostname)
 
-            # Password handling
-            self.temp_password = self.password.text() if password == "guest" and self.password.text() else password
-            if not self.temp_password:
-                raise ValueError("Password is required")
-            set_credentials(self.session_id, 'password', self.temp_password)
+        if username == "guest":
+            if self.username.text():
+                self.temp_username = self.username.text()
+        else:
+            if not username:
+                return
+            self.temp_username = username
 
-            # Port handling
-            self.temp_port = self.port_selector.text() or port or "22"
-            try:
-                int(self.temp_port)  # Validate port is a number
-            except ValueError:
-                raise ValueError("Port must be a valid number")
-            set_credentials(self.session_id, 'port', self.temp_port)
+        ic("set_credentials")
+        ic(self.session_id)
+        ic(self.temp_username)
+        set_credentials( self.session_id, 'username', self.temp_username)
 
-            # Set directories
-            set_credentials(self.session_id, 'current_local_directory', os.getcwd())
-            set_credentials(self.session_id, 'current_remote_directory', '.')
+        if password == "guest":
+            if self.password.text():
+                self.temp_password = self.password.text()
+        else:
+            if not password:
+                return
+            self.temp_password = password
 
-            # Refresh current creds
-            creds = get_credentials(self.session_id)
-            ic(creds)
+        ic(self.session_id)
+        ic(self.temp_password)
+        set_credentials( self.session_id, 'password', self.temp_password)
 
-            # Create a new QWidget as a container for both the file table and the output console
-            self.container_widget = QWidget()
+        if self.port_selector.text():
+            self.temp_port = self.port_selector.text()
+        else:
+            if not port:
+                port = "22"
+            self.temp_port = port
 
-            self.YouAddTab(self.session_id, self.container_widget)
+        ic("set_credentials")
+        ic(self.session_id)
+        ic(self.temp_port)
 
-            return self.session_id
+        set_credentials( self.session_id, 'port', self.temp_port)
+        set_credentials( self.session_id, 'current_local_directory', os.getcwd())
+        # this either needs to be set to . or we need to sftp_getcwd it.... can't remember
+        set_credentials( self.session_id, 'current_remote_directory', '.')
 
-        except ValueError as ve:
-            self.output_console.append(f"Error: {str(ve)}")
-            return None
-        except Exception as e:
-            self.output_console.append(f"Unexpected error occurred: {str(e)}")
-            return None
+        # refresh current creds
+        creds = get_credentials(self.session_id)
+        ic(creds)
+
+        # Create a new QWidget as a container for both the file table and the output console
+        self.container_widget = QWidget()
+
+        self.YouAddTab(self.session_id, self.container_widget)
+
+        return self.session_id
 
     def create_initial_data(self):
         """
