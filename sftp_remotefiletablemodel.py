@@ -1,18 +1,24 @@
 from PyQt5.QtCore import QVariant,QAbstractTableModel,QModelIndex,QTimer, QDateTime, Qt, QEventLoop
 import base64
 import queue
+import logging
 from icecream import ic
 
 from sftp_creds import get_credentials, create_random_integer
 from sftp_downloadworkerclass import create_response_queue, delete_response_queue, add_sftp_job
 
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
 class RemoteFileTableModel(QAbstractTableModel):
     def __init__(self, session_id, parent=None):
-        super().__init__(parent)  # Simplified form in Python 3
+        super().__init__(parent)
         self.session_id = session_id
-        self.file_list = []  # Initialize as an empty list
+        self.file_list = []
         self.column_names = ['Name', 'Size', 'Permissions', 'Modified']
-        self.get_files()
+        self.cache = {}  # Add a cache dictionary
+        logger.debug(f"Initializing RemoteFileTableModel with session_id: {session_id}")
+        self.get_files()  # Call get_files once when initializing
 
     def is_remote_browser(self):
         return True
@@ -25,7 +31,35 @@ class RemoteFileTableModel(QAbstractTableModel):
         # Return the number of columns
         return len(self.column_names)
 
+    def refresh_file_list(self):
+        creds = get_credentials(self.session_id)
+        sftp = creds.get('sftp')
+        if sftp:
+            try:
+                remote_path = creds.get('current_remote_directory', '.')
+                self.file_list = sftp.listdir_attr(remote_path)
+                self.layoutChanged.emit()
+            except Exception as e:
+                print(f"Error refreshing file list: {str(e)}")
+
     def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid() or not (0 <= index.row() < len(self.file_list)):
+            return None
+
+        file_attr = self.file_list[index.row()]
+        column = index.column()
+
+        if role == Qt.DisplayRole:
+            if column == 0:  # Name
+                return file_attr.filename
+            elif column == 1:  # Size
+                return str(file_attr.st_size)
+            elif column == 2:  # Permissions
+                return oct(file_attr.st_mode)[-3:]
+            elif column == 3:  # Modified
+                return str(datetime.fromtimestamp(file_attr.st_mtime))
+
+        return None
         if not index.isValid() or not (0 <= index.row() < len(self.file_list)):
             return QVariant()
 
@@ -100,57 +134,40 @@ class RemoteFileTableModel(QAbstractTableModel):
         self.layoutChanged.emit()
 
     def get_files(self):
+        logger.debug("Entering get_files method")
         creds = get_credentials(self.session_id)
-        """
-        Fetches file attributes from the specified path using the given SFTP connection.
-        :param sftp: Paramiko SFTP client object
-        :param path: Path to the directory on the remote server
-        """
-        # List all files and directories in the specified path
-        items = self.sftp_listdir_attr(creds.get('current_remote_directory'))
-        # Clear the existing file list
-        # Inform the view that the model is about to be reset
+        current_remote_directory = creds.get('current_remote_directory', '.')
+        logger.debug(f"Current remote directory: {current_remote_directory}")
+
         self.beginResetModel()
         self.file_list.clear()
 
-        # Add the '..' entry to represent the parent directory
-        # Assuming that size, permissions, and modified_time for '..' are not relevant, set them to default values
+        # Always add the '..' entry
         self.file_list.append(("..", 0, "----", "----"))
+        logger.debug("Added '..' entry to file_list")
 
-        for item in items:
-            # Get file name
-            try:
-                name = item.filename
-            except Exception as e:
-                name = ""
+        try:
+            logger.debug("Attempting to fetch remote files")
+            items = self.sftp_listdir_attr(current_remote_directory)
+            logger.debug(f"Fetched {len(items)} items from remote directory")
+            
+            for item in items:
+                name = getattr(item, 'filename', '')
+                size = getattr(item, 'st_size', 0)
+                permissions = oct(getattr(item, 'st_mode', 0))[-4:]
+                modified_time = QDateTime.fromSecsSinceEpoch(getattr(item, 'st_mtime', 0)).toString(Qt.ISODate)
+                
+                self.file_list.append((name, size, permissions, modified_time))
+                logger.debug(f"Added file to list: {name}")
+        
+        except Exception as e:
+            logger.error(f"Error fetching remote files: {str(e)}")
+            # You might want to emit a signal here to inform the user about the error
 
-            # Get file size
-            try:
-                size = item.st_size
-            except Exception as e:
-                size = 0
-
-            # Get file permissions (convert to octal string)
-            try:
-                permissions = oct(item.st_mode)[-4:]
-            except Exception as e:
-                permissions = ""
-
-            # Get file modification time and convert it to a readable format
-            try:
-                modified_time = QDateTime.fromSecsSinceEpoch(item.st_mtime).toString(Qt.ISODate)
-            except Exception as e:
-                modified_time = ""
-
-            # Append the file information to the list
-            self.file_list.append((name, size, permissions, modified_time))
-
-        # Emit dataChanged for the entire range of data
-        top_left = self.createIndex(0, 0)  # Top left cell of the table
-        bottom_right = self.createIndex(self.rowCount() - 1, self.columnCount() - 1)  # Bottom right cell
-        self.dataChanged.emit(top_left, bottom_right)
+        logger.debug(f"Total files in file_list: {len(self.file_list)}")
         self.endResetModel()
         self.layoutChanged.emit()
+        logger.debug("Exiting get_files method")
 
     def non_blocking_sleep(self, ms):
         # sleep function that shouldn't block any other threads
@@ -189,3 +206,165 @@ class RemoteFileTableModel(QAbstractTableModel):
             return list
         else:
             return f
+from PyQt5.QtCore import Qt, QAbstractTableModel, QModelIndex
+from PyQt5.QtGui import QColor
+from icecream import ic
+import stat
+import os
+from datetime import datetime
+
+from sftp_creds import get_credentials, create_random_integer
+from sftp_downloadworkerclass import create_response_queue, delete_response_queue, add_sftp_job
+
+class RemoteFileTableModel(QAbstractTableModel):
+    def __init__(self, session_id, parent=None):
+        super().__init__(parent)
+        self.session_id = session_id
+        self.file_list = []
+        self.column_names = ['Name', 'Size', 'Permissions', 'Modified']
+        self.cache = {}  # Initialize the cache attribute
+        self.refresh_file_list()  # Add this line to refresh the file list upon initialization
+
+    def is_remote_browser(self):
+        return True
+
+    def rowCount(self, parent=QModelIndex()):
+        return len(self.file_list)
+
+    def columnCount(self, parent=QModelIndex()):
+        return len(self.column_names)
+
+    def data(self, index, role=Qt.DisplayRole):
+        logger.debug(f"data method called with index: {index}, role: {role}")
+        if not index.isValid() or not (0 <= index.row() < len(self.file_list)):
+            logger.debug("Invalid index or out of range")
+            return None
+
+        file_info = self.file_list[index.row()]
+        column = index.column()
+        logger.debug(f"File info: {file_info}, Column: {column}")
+
+        if role == Qt.DisplayRole:
+            try:
+                if column == 0:  # Name
+                    logger.debug(f"Returning name: {file_info['name']}")
+                    return file_info['name']
+                elif column == 1:  # Size
+                    logger.debug(f"Returning size: {file_info['size']}")
+                    return str(file_info['size'])
+                elif column == 2:  # Permissions
+                    logger.debug(f"Returning permissions: {file_info['permissions']}")
+                    return file_info['permissions']
+                elif column == 3:  # Modified
+                    logger.debug(f"Returning modified time: {file_info['modified']}")
+                    return file_info['modified']
+            except KeyError as e:
+                logger.error(f"KeyError in data method: {e}")
+                return str(file_info)
+        elif role == Qt.BackgroundRole:
+            if file_info['permissions'].startswith('d'):
+                logger.debug(f"Returning background color for directory: {file_info['name']}")
+                return QColor(230, 230, 250)  # Light blue for directories
+        elif role == Qt.TextAlignmentRole:
+            if column == 1:  # Size
+                return Qt.AlignRight | Qt.AlignVCenter
+            else:
+                return Qt.AlignLeft | Qt.AlignVCenter
+        
+        logger.debug(f"Returning None for role: {role}")
+        return None
+
+    def headerData(self, section, orientation, role):
+        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
+            return self.column_names[section]
+        return None
+
+    def sort(self, column, order):
+        self.layoutAboutToBeChanged.emit()
+        if column == 0:  # Name
+            self.file_list.sort(key=lambda x: x['name'].lower(), reverse=(order == Qt.DescendingOrder))
+        elif column == 1:  # Size
+            self.file_list.sort(key=lambda x: x['size'], reverse=(order == Qt.DescendingOrder))
+        elif column == 2:  # Permissions
+            self.file_list.sort(key=lambda x: x['permissions'], reverse=(order == Qt.DescendingOrder))
+        elif column == 3:  # Modified
+            self.file_list.sort(key=lambda x: x['modified'], reverse=(order == Qt.DescendingOrder))
+        self.layoutChanged.emit()
+
+    def get_files(self):
+        creds = get_credentials(self.session_id)
+        current_remote_directory = creds.get('current_remote_directory', '.')
+
+        # Check if the directory listing is already in the cache
+        if current_remote_directory in self.cache:
+            self.file_list = self.cache[current_remote_directory]
+            self.layoutChanged.emit()
+            return
+
+        job_id = create_random_integer()
+        queue = create_response_queue(job_id)
+
+        try:
+            add_sftp_job(current_remote_directory, True, current_remote_directory, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "listdir_attr", job_id)
+
+            while queue.empty():
+                self.non_blocking_sleep(100)
+            response = queue.get_nowait()
+
+            if response == "error":
+                error = queue.get_nowait()
+                self.file_list = []  # Clear the file list on error
+            else:
+                file_list = queue.get_nowait()
+                self.file_list = []
+                for file_attr in file_list:
+                    file_info = {
+                        'name': file_attr.filename,
+                        'size': file_attr.st_size,
+                        'permissions': self.get_permissions(file_attr.st_mode),
+                        'modified': datetime.fromtimestamp(file_attr.st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
+                        'st_mode': file_attr.st_mode
+                    }
+                    self.file_list.append(file_info)
+
+                # Add parent directory entry
+                if current_remote_directory != '/':
+                    parent_dir = {
+                        'name': '..',
+                        'size': 0,
+                        'permissions': 'drwxr-xr-x',
+                        'modified': '',
+                        'st_mode': stat.S_IFDIR
+                    }
+                    self.file_list.insert(0, parent_dir)
+
+                # Cache the directory listing
+                self.cache[current_remote_directory] = self.file_list.copy()
+
+            self.layoutChanged.emit()
+
+        except Exception as e:
+            self.file_list = []  # Clear the file list on error
+        finally:
+            delete_response_queue(job_id)
+
+    def non_blocking_sleep(self, ms):
+        from PyQt5.QtCore import QTimer, QEventLoop
+        loop = QEventLoop()
+        QTimer.singleShot(ms, loop.quit)
+        loop.exec_()
+
+    def get_permissions(self, st_mode):
+        perms = ['---', '--x', '-w-', '-wx', 'r--', 'r-x', 'rw-', 'rwx']
+        mode = st_mode & 0o777
+        return f"{'d' if stat.S_ISDIR(st_mode) else '-'}{perms[(mode >> 6) & 7]}{perms[(mode >> 3) & 7]}{perms[mode & 7]}"
+
+    def format_size(self, size):
+        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+            if size < 1024.0:
+                return f"{size:.1f} {unit}"
+            size /= 1024.0
+        return f"{size:.1f} PB"
+
+    def refresh_file_list(self):
+        self.get_files()

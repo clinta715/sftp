@@ -5,6 +5,17 @@ sftp_current_creds = {}
 
 # Function to retrieve credentials based on session_id
 def get_credentials(session_id):
+    creds = sftp_current_creds.get(session_id, {})
+    if not creds:
+        return {
+            'hostname': 'localhost',
+            'username': 'guest',
+            'password': 'guest',
+            'port': 22,
+            'current_local_directory': os.getcwd(),
+            'current_remote_directory': '.'
+        }
+    return creds
     try:
         return sftp_current_creds.get(session_id, None)
     except KeyError:

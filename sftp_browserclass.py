@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import QTableView, QApplication, QWidget, QVBoxLayout, QLabel, QFileDialog, QMessageBox, QInputDialog, QMenu, QHeaderView, QProgressBar, QSizePolicy
-from PyQt5.QtCore import pyqtSignal, QTimer, Qt, QEventLoop, QModelIndex
+from PyQt5.QtGui import QDesktopServices
+from PyQt5.QtCore import pyqtSignal, QTimer, Qt, QEventLoop, QModelIndex, QUrl
 from PyQt5 import QtCore
 from stat import S_ISDIR
 import stat
@@ -26,14 +27,17 @@ class Browser(QWidget):
     def init_global_creds(self):
         ic()
         creds = get_credentials(self.session_id)
-        try:
-            self.init_hostname = creds.get('hostname')
-        except Exception as e:
-            ic(e)
-
-        self.init_username = creds.get('username')
-        self.init_password = creds.get('password')
-        self.init_port = creds.get('port')
+        if creds is None:
+            ic("No credentials found")
+            self.init_hostname = "localhost"
+            self.init_username = "guest"
+            self.init_password = "guest"
+            self.init_port = 22
+        else:
+            self.init_hostname = creds.get('hostname', "localhost")
+            self.init_username = creds.get('username', "guest")
+            self.init_password = creds.get('password', "guest")
+            self.init_port = creds.get('port', 22)
 
     # Define a signal for sending messages to the console
     message_signal = pyqtSignal(str)
@@ -614,6 +618,7 @@ class Browser(QWidget):
             change_dir_action = menu.addAction("Change Directory")  # New action
             upload_download_action = menu.addAction("Upload/Download")
             prompt_and_create_directory = menu.addAction("Create Directory")
+            view_action = menu.addAction("View")
 
             # Connect the actions to corresponding methods
             remove_dir_action.triggered.connect(self.remove_directory_with_prompt)
@@ -743,6 +748,25 @@ class Browser(QWidget):
         dialog.setDefaultButton(QMessageBox.Yes)
 
         return dialog.exec_()
+
+    def view_item(self):
+        current_browser = self.focusWidget()
+        if current_browser is not None and isinstance(current_browser, QTableView):
+            current_index = current_browser.currentIndex()
+            if current_index.isValid():
+                selected_item = current_browser.model().data(current_index, Qt.DisplayRole)
+                creds = get_credentials(self.session_id)
+                if self.is_remote_browser():
+                    # Download and view for remote items
+                    local_path = os.path.join(os.path.expanduser("~"), "Downloads", selected_item)
+                    remote_path = self.get_normalized_remote_path(creds.get('current_remote_directory'), selected_item)
+                    self.upload_download(remote_path)
+                    self.non_blocking_sleep(1000)  # Wait for download to complete
+                    QDesktopServices.openUrl(QUrl.fromLocalFile(local_path))
+                else:
+                    # View for local items
+                    full_path = os.path.join(creds.get('current_local_directory'), selected_item)
+                    QDesktopServices.openUrl(QUrl.fromLocalFile(full_path))
 
     def sftp_exists(self, path):
         creds = get_credentials(self.session_id)

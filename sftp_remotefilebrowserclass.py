@@ -7,26 +7,54 @@ import stat
 
 from sftp_remotefiletablemodel import RemoteFileTableModel
 from sftp_creds import get_credentials, create_random_integer, set_credentials, create_random_integer
+from datetime import datetime
+from datetime import datetime
+from datetime import datetime
 from sftp_downloadworkerclass import create_response_queue, delete_response_queue, add_sftp_job, QueueItem
 # from sftp_backgroundthreadwindow import queue_display_append
 
 class RemoteFileBrowser(FileBrowser):
     def __init__(self, title, session_id, parent=None):
-        super().__init__(title, session_id, parent)  # Initialize the FileBrowser parent class
+        super().__init__(title, session_id, parent)
         self.model = RemoteFileTableModel(self.session_id)
-
         self.table.setModel(self.model)
-        # Set horizontal scroll bar policy for the entire table
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-
-        # Resize the first column based on its contents
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        ic()
+        
+        # Set column widths
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        
+        # Connect double-click event to change directory
+        self.table.doubleClicked.connect(self.change_directory)
+        
+        # Refresh the file list
+        self.refresh_file_list()
+        # Debug call removed
 
         set_credentials(self.session_id, 'current_remote_directory', self.sftp_getcwd())
 
     def is_remote_browser(self):
         return True
+
+    def refresh_file_list(self):
+        self.model.refresh_file_list()
+
+    def change_directory(self, index):
+        if index.column() == 0:  # Only respond to clicks in the Name column
+            file_name = self.model.data(index, Qt.DisplayRole)
+            creds = get_credentials(self.session_id)
+            current_dir = creds.get('current_remote_directory', '.')
+            new_path = os.path.join(current_dir, file_name)
+            
+            try:
+                # Check if it's a directory
+                if stat.S_ISDIR(self.model.file_list[index.row()].st_mode):
+                    set_credentials(self.session_id, 'current_remote_directory', new_path)
+                    self.refresh_file_list()
+            except Exception as e:
+                print(f"Error changing directory: {str(e)}")
 
     def close_sftp_connection(self):
         creds = get_credentials(self.session_id)
@@ -70,28 +98,23 @@ class RemoteFileBrowser(FileBrowser):
         job_id = create_random_integer()
         queue = create_response_queue( job_id )
 
-        ic()
-        ic(creds)
-
         try:
             add_sftp_job(creds.get('current_remote_directory'), True, ".", True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "getcwd", job_id)
         except Exception as e:
-            ic(e)
+            print(f"Error in sftp_getcwd: {e}")
 
         while queue.empty():
-            self.non_blocking_sleep(100)  # Sleeps for 1000 milliseconds (1 second)
+            self.non_blocking_sleep(100)  # Sleeps for 100 milliseconds
         response = queue.get_nowait()
 
         if response == "error":
             response = queue.get_nowait()
-            ic(response)
+            print(f"Error in sftp_getcwd: {response}")
             new_path = None
         else:
-            # if success, set our new remote working path to the newly created path path that we path'd pathily'
             new_path = queue.get_nowait()
 
         delete_response_queue(job_id)
-        ic(new_path)
         return new_path
 
     def change_directory(self, path ):

@@ -43,6 +43,8 @@ class CustomTableWidget(QTableWidget):
 class EditDialog(QDialog):
     entryDoubleClicked = pyqtSignal(dict)
 
+    dataChanged = pyqtSignal(dict)
+
     def __init__(self, host_data, parent=None):
         super().__init__(parent)
         self.host_data = host_data
@@ -50,24 +52,9 @@ class EditDialog(QDialog):
         self.table.cellDoubleClicked.connect(self.onCellDoubleClicked)
 
     def initUI(self):
-        self.table = CustomTableWidget(self, len(self.host_data), 4)  # Use the custom table widget
-        # Assuming self.table is your QTableWidget or QTableView
+        self.table = CustomTableWidget(self, 0, 4)  # Start with 0 rows, we'll add them as we load data
         self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.table.setHorizontalHeaderLabels(["Hostname", "Username", "Password", "Port"])
-
-        try:
-            self.load_data_from_file("sftp.json")
-        except:
-            # ic("can't load sftp.json")
-            self.host_data = {
-                'localhost': {
-                    'username': 'guest',
-                    'password': base64.b64encode('guest'.encode()).decode(),
-                    'port': 22
-                }
-            }
-            # Save the initial data to the file
-            self.save_data()         
 
         # Stretch the last section to fill the space
         header = self.table.horizontalHeader()
@@ -75,7 +62,7 @@ class EditDialog(QDialog):
 
         save_button = QPushButton("Save")
         connect_button = QPushButton("Connect")
-        save_button.clicked.connect(self.save_data_to_file)
+        save_button.clicked.connect(self.save_data)
         connect_button.clicked.connect(self.connect_button_clicked)
         layout = QVBoxLayout()
         layout.addWidget(self.table)
@@ -123,27 +110,26 @@ class EditDialog(QDialog):
         self.entryDoubleClicked.emit(entry)
 
     def load_data(self):
-        for row, (hostname, details) in enumerate(self.host_data.items()):
-            # Create table items for hostname, username, and port
+        self.table.setRowCount(0)  # Clear existing rows
+        for hostname, details in self.host_data['hostnames'].items():
+            row = self.table.rowCount()
+            self.table.insertRow(row)
+            
+            # Create table items for hostname, username, password, and port
             hostname_item = QTableWidgetItem(hostname)
-            username_item = QTableWidgetItem(details['username'])
-            port_item = QTableWidgetItem(str(details['port']))
+            username_item = QTableWidgetItem(self.host_data['usernames'].get(hostname, ''))
+            password_item = PasswordItem(self.host_data['passwords'].get(hostname, ''))
+            port_item = QTableWidgetItem(str(self.host_data['ports'].get(hostname, '')))
 
             # Set the items as editable
-            hostname_item.setFlags(hostname_item.flags() | Qt.ItemIsEditable)
-            username_item.setFlags(username_item.flags() | Qt.ItemIsEditable)
-            port_item.setFlags(port_item.flags() | Qt.ItemIsEditable)
+            for item in [hostname_item, username_item, password_item, port_item]:
+                item.setFlags(item.flags() | Qt.ItemIsEditable)
 
             # Add the items to the table
             self.table.setItem(row, 0, hostname_item)
             self.table.setItem(row, 1, username_item)
-            self.table.setItem(row, 3, port_item)
-
-            # Use PasswordItem for the password, ensure it's editable if it's a custom class
-            password_item = PasswordItem(details['password'])
-            # Uncomment and modify the following line if PasswordItem needs to be explicitly set as editable
-            # password_item.setFlags(password_item.flags() | Qt.ItemIsEditable)
             self.table.setItem(row, 2, password_item)
+            self.table.setItem(row, 3, port_item)
 
     def contextMenuEvent(self, event):
         item = self.itemAt(event.pos())
@@ -192,40 +178,28 @@ class EditDialog(QDialog):
         self.save_data()
 
     def save_data(self):
-        # Takes data out of the table and puts it in self.host_data while removing duplicates
-        new_host_data = {}
+        new_host_data = {
+            "hostnames": {},
+            "usernames": {},
+            "passwords": {},
+            "ports": {}
+        }
         seen_hostnames = set()
 
         for row in range(self.table.rowCount()):
-            if self.table.item(row, 0) == None:
-                continue
-            if self.table.item(row, 1) == None:
-                continue
-            if self.table.item(row, 2) == None:
-                continue
-            if self.table.item(row, 3) == None:
-                continue
-            # Repeat similar checks for other columns.
-
-            hostname = self.table.item(row, 0).text()
-            username = self.table.item(row, 1).text()
-            password = self.table.item(row, 2).text()
-            port = self.table.item(row, 3).text()
-
-            # Base64 encode the password
-            encoded_password = base64.b64encode(password.encode()).decode()
-
-            # Check if the hostname is already seen, and skip duplicates
-            if hostname not in seen_hostnames:
-                new_host_data[hostname] = {
-                    'username': username,
-                    'password': encoded_password,
-                    'port': port
-                }
-
-                seen_hostnames.add(hostname)
+            items = [self.table.item(row, col) for col in range(4)]
+            if all(items):  # Ensure all cells in the row have data
+                hostname, username, password, port = [item.text() for item in items]
+                
+                if hostname not in seen_hostnames:
+                    new_host_data["hostnames"][hostname] = hostname
+                    new_host_data["usernames"][hostname] = username
+                    new_host_data["passwords"][hostname] = password
+                    new_host_data["ports"][hostname] = port
+                    seen_hostnames.add(hostname)
 
         self.host_data = new_host_data
+        self.dataChanged.emit(self.host_data)
         self.accept()
 
 class EditDialogContainer(QWidget):
