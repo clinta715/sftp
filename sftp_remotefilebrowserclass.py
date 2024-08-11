@@ -8,8 +8,6 @@ import stat
 from sftp_remotefiletablemodel import RemoteFileTableModel
 from sftp_creds import get_credentials, create_random_integer, set_credentials, create_random_integer
 from datetime import datetime
-from datetime import datetime
-from datetime import datetime
 from sftp_downloadworkerclass import create_response_queue, delete_response_queue, add_sftp_job, QueueItem
 # from sftp_backgroundthreadwindow import queue_display_append
 
@@ -172,7 +170,6 @@ class RemoteFileBrowser(FileBrowser):
             
             # Early return for parent directory navigation
             if temp_path == "..":
-                ic()
                 self.change_directory(temp_path)
                 return True
 
@@ -181,8 +178,6 @@ class RemoteFileBrowser(FileBrowser):
                 path = self.get_normalized_remote_path(creds.get('current_remote_directory'), temp_path)
             else:
                 path = temp_path
-            
-            ic(path)
 
             # Check if the path is a directory or a file
             if self.is_remote_directory(path):
@@ -192,7 +187,6 @@ class RemoteFileBrowser(FileBrowser):
                 ic(temp_path, local_path)
                 if local_path:
                     # Call upload_download to handle download (or upload if it was local)
-                    ic()
                     self.upload_download(path, local_path)
                     # Emit a signal or log the download
                     self.message_signal.emit(f"Downloaded file: {path} to {local_path}")
@@ -208,9 +202,6 @@ class RemoteFileBrowser(FileBrowser):
 
         if not ok:
             return
-
-        ic()
-        ic(selected_item)
 
         if self.is_remote_directory(selected_item):
             ic(selected_item)
@@ -326,13 +317,7 @@ class RemoteFileBrowser(FileBrowser):
                         local_base_path = creds.get('current_local_directory')
                         local_entry_path = os.path.join( local_base_path, selected_item_text)
 
-                        ic(selected_item_text)
-                        ic(remote_entry_path)
-                        ic(local_base_path)
-                        ic(local_entry_path)
-
                         if self.is_remote_directory(remote_entry_path):
-                            ic(remote_entry_path)
                             # if its a remote directory, we establish its path selected_item+remote path
                             # then we download it to current local directory + selected_item_text (?)
                             ic(local_entry_path)
@@ -340,8 +325,6 @@ class RemoteFileBrowser(FileBrowser):
                         else:
                             job_id = create_random_integer()
                             queue_item = QueueItem(remote_entry_path, job_id)
-                            ic(remote_entry_path, local_entry_path)
-                            ic(job_id)
                             add_sftp_job(remote_entry_path, True, local_entry_path, False, 
                                         self.init_hostname, self.init_username, 
                                         self.init_password, self.init_port, 
@@ -360,14 +343,11 @@ class RemoteFileBrowser(FileBrowser):
             self.message_signal.emit("Current browser is not a valid QTableView.")
 
     def download_directory(self, source_directory, destination_directory, always=0):
-        ic()
         self.always = always
 
         try:
             # Create a local folder with the same name as the remote folder
-            ic(source_directory, destination_directory)
             local_folder = os.path.join(destination_directory, os.path.basename(source_directory))
-            ic(local_folder)
 
             if os.path.exists(local_folder):
                 # Check if 'always' option was selected before
@@ -445,7 +425,6 @@ class RemoteFileBrowser(FileBrowser):
 
                     queue_item = QueueItem( os.path.basename(entry_path), job_id )
                     # ic()
-                    ic(job_id)
                     add_sftp_job(entry_path, True, local_entry_path, False, self.init_hostname, self.init_username, self.init_password, self.init_port, "download", job_id)
 
         except Exception as e:
