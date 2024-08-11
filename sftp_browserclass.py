@@ -625,7 +625,7 @@ class Browser(QWidget):
             change_dir_action.triggered.connect(self.change_directory_handler)  # Connect to the new method
             upload_download_action.triggered.connect(self.upload_download)
             prompt_and_create_directory.triggered.connect(self.prompt_and_create_directory)
-
+            view_action.triggered.connect(self.view_item)
             # Show the menu at the cursor position
             menu.exec_(current_browser.mapToGlobal(point))
 
@@ -748,6 +748,23 @@ class Browser(QWidget):
         dialog.setDefaultButton(QMessageBox.Yes)
 
         return dialog.exec_()
+
+    def view_file(self):
+        current_index = self.table.currentIndex()
+        if current_index.isValid():
+            file_name = self.model.data(current_index, Qt.DisplayRole)
+            file_path = os.path.join(self.model.directory, file_name)
+            if os.path.isfile(file_path):
+                self.open_file_with_default_app(file_path)
+
+    def open_file_with_default_app(self, file_path):
+        try:
+            if os.name == 'nt':  # For Windows
+                os.startfile(file_path)
+            elif os.name == 'posix':  # For macOS and Linux
+                subprocess.call(('open', file_path))
+        except Exception as e:
+            self.message_signal.emit(f"Error opening file: {str(e)}")
 
     def view_item(self):
         current_browser = self.focusWidget()

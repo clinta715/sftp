@@ -1,8 +1,9 @@
-from PyQt5.QtCore import QVariant,QAbstractTableModel,QModelIndex,QTimer, QDateTime, Qt, QEventLoop
+from PyQt5.QtCore import QVariant, QAbstractTableModel, QModelIndex, QTimer, QDateTime, Qt, QEventLoop
 import base64
 import queue
 import logging
 from icecream import ic
+from datetime import datetime
 
 from sftp_creds import get_credentials, create_random_integer
 from sftp_downloadworkerclass import create_response_queue, delete_response_queue, add_sftp_job
@@ -42,6 +43,7 @@ class RemoteFileTableModel(QAbstractTableModel):
             except Exception as e:
                 print(f"Error refreshing file list: {str(e)}")
 
+
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid() or not (0 <= index.row() < len(self.file_list)):
             return None
@@ -50,14 +52,26 @@ class RemoteFileTableModel(QAbstractTableModel):
         column = index.column()
 
         if role == Qt.DisplayRole:
-            if column == 0:  # Name
-                return file_attr.filename
-            elif column == 1:  # Size
-                return str(file_attr.st_size)
-            elif column == 2:  # Permissions
-                return oct(file_attr.st_mode)[-3:]
-            elif column == 3:  # Modified
-                return str(datetime.fromtimestamp(file_attr.st_mtime))
+            if isinstance(file_attr, tuple):
+                # Handle tuple case
+                if column == 0:  # Name
+                    return file_attr[0]
+                elif column == 1:  # Size
+                    return str(file_attr[1])
+                elif column == 2:  # Permissions
+                    return file_attr[2]
+                elif column == 3:  # Modified
+                    return file_attr[3]
+            else:
+                # Handle object case
+                if column == 0:  # Name
+                    return getattr(file_attr, 'filename', '')
+                elif column == 1:  # Size
+                    return str(getattr(file_attr, 'st_size', 0))
+                elif column == 2:  # Permissions
+                    return oct(getattr(file_attr, 'st_mode', 0))[-3:]
+                elif column == 3:  # Modified
+                    return str(datetime.fromtimestamp(getattr(file_attr, 'st_mtime', 0)))
 
         return None
         if not index.isValid() or not (0 <= index.row() < len(self.file_list)):

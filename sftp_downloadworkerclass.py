@@ -155,22 +155,18 @@ class DownloadWorker(QRunnable):
 
     def run(self):
         try:
-            logging.info(f"Starting transfer {self.transfer_id}")
             self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             if not self.hostname:
                 raise ValueError("Hostname is empty")
-            logging.info(f"Connecting to {self.hostname}:{self.port}")
             self.ssh.connect(self.hostname, self.port, self.username, self.password)
             self.sftp = self.ssh.open_sftp()
 
             if self.is_source_remote and not self.is_destination_remote:
                 # Download from remote to local
-                logging.info(f"Downloading {self.job_source} to {self.job_destination}")
                 self.signals.message.emit(self.transfer_id, f"Downloading {self.job_source} to {self.job_destination}")
                 self.sftp.get(self.job_source, self.job_destination, callback=self.progress)
             elif self.is_destination_remote and not self.is_source_remote:
                 # Upload from local to remote
-                logging.info(f"Uploading {self.job_source} to {self.job_destination}")
                 self.signals.message.emit(self.transfer_id, f"Uploading {self.job_source} to {self.job_destination}")
                 self.sftp.put(self.job_source, self.job_destination, callback=self.progress)
             elif self.is_source_remote and self.is_destination_remote:
@@ -210,7 +206,6 @@ class DownloadWorker(QRunnable):
                 self.sftp.close()
             if hasattr(self, 'ssh'):
                 self.ssh.close()
-            logging.info(f"Transfer {self.transfer_id} finished")
             self.signals.finished.emit(self.transfer_id)
 
     def execute_remote_command(self):

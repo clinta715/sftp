@@ -27,10 +27,6 @@ class FileBrowser(Browser):
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         # ic("file browser init completed")
 
-        # Set up context menu
-        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.table.customContextMenuRequested.connect(self.show_context_menu)
-
     def remove_directory_with_prompt(self, local_path=None, always=0):
         self.always = always
         creds = get_credentials( self.session_id )
@@ -104,26 +100,3 @@ class FileBrowser(Browser):
     def is_remote_browser(self):
         return False
 
-    def show_context_menu(self, position):
-        menu = QMenu()
-        view_action = QAction("View", self)
-        view_action.triggered.connect(self.view_file)
-        menu.addAction(view_action)
-        menu.exec_(self.table.viewport().mapToGlobal(position))
-
-    def view_file(self):
-        current_index = self.table.currentIndex()
-        if current_index.isValid():
-            file_name = self.model.data(current_index, Qt.DisplayRole)
-            file_path = os.path.join(self.model.directory, file_name)
-            if os.path.isfile(file_path):
-                self.open_file_with_default_app(file_path)
-
-    def open_file_with_default_app(self, file_path):
-        try:
-            if os.name == 'nt':  # For Windows
-                os.startfile(file_path)
-            elif os.name == 'posix':  # For macOS and Linux
-                subprocess.call(('open', file_path))
-        except Exception as e:
-            self.message_signal.emit(f"Error opening file: {str(e)}")

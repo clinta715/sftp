@@ -24,12 +24,11 @@ class RemoteFileBrowser(FileBrowser):
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
         
-        # Connect double-click event to change directory
-        self.table.doubleClicked.connect(self.change_directory)
+        # Connect double-click event to double_click_handler
+        self.table.doubleClicked.connect(self.double_click_handler)
         
         # Refresh the file list
         self.refresh_file_list()
-        # Debug call removed
 
         set_credentials(self.session_id, 'current_remote_directory', self.sftp_getcwd())
 
@@ -38,21 +37,6 @@ class RemoteFileBrowser(FileBrowser):
 
     def refresh_file_list(self):
         self.model.refresh_file_list()
-
-    def change_directory(self, index):
-        if index.column() == 0:  # Only respond to clicks in the Name column
-            file_name = self.model.data(index, Qt.DisplayRole)
-            creds = get_credentials(self.session_id)
-            current_dir = creds.get('current_remote_directory', '.')
-            new_path = os.path.join(current_dir, file_name)
-            
-            try:
-                # Check if it's a directory
-                if stat.S_ISDIR(self.model.file_list[index.row()].st_mode):
-                    set_credentials(self.session_id, 'current_remote_directory', new_path)
-                    self.refresh_file_list()
-            except Exception as e:
-                print(f"Error changing directory: {str(e)}")
 
     def close_sftp_connection(self):
         creds = get_credentials(self.session_id)
