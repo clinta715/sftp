@@ -15,8 +15,8 @@ from PyQt5.QtCore import pyqtSignal, QObject, QCoreApplication, Qt, QTimer
 from cryptography.fernet import Fernet
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logging.getLogger("paramiko").setLevel(logging.WARNING)
+##logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+##logging.getLogger("paramiko").setLevel(logging.WARNING)
 
 from sftp_downloadworkerclass import transferSignals, add_sftp_job, sftp_queue_clear
 from PyQt5.QtCore import pyqtSignal

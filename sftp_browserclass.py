@@ -15,7 +15,6 @@ from sftp_downloadworkerclass import create_response_queue, delete_response_queu
 class Browser(QWidget):
     def __init__(self, title, session_id, parent=None):
         super().__init__(parent)  # Initialize the QWidget parent class
-        ic()
         self.observers = []
         self.title = title
         self.model = None
@@ -25,7 +24,6 @@ class Browser(QWidget):
         self.init_ui()
 
     def init_global_creds(self):
-        ic()
         creds = get_credentials(self.session_id)
         if creds is None:
             ic("No credentials found")
@@ -43,7 +41,6 @@ class Browser(QWidget):
     message_signal = pyqtSignal(str)
 
     def init_ui(self):
-        ic()
         self.layout = QVBoxLayout()
         self.label = QLabel(self.title)
         self.layout.addWidget(self.label)
@@ -82,21 +79,17 @@ class Browser(QWidget):
     def add_observer(self,observer):
         if observer not in self.observers:
             self.observers.append(observer)
-            ic("Observer added:", observer)
         else:
             ic("Observer already exists:", observer)
 
     def remove_observer(self,observer):
         if observer in self.observers:
             self.observers.remove(observer)
-            ic("Observer removed:", observer)
 
     def notify_observers(self):
-            ic()
             for observer in self.observers:
                 try:
                     observer.get_files()  # Notify the observer by calling its update method
-                    ic("Observer notified:", observer)
                 except AttributeError as ae:
                     ic("Observer", observer, "does not implement 'get_files' method.", ae)
                 except Exception as e:
@@ -166,7 +159,6 @@ class Browser(QWidget):
         return False        
 
     def split_path(self, path):
-        ic()
         # try to deal with windows backslashes
         if "\\" in path:
             # Use "\\" as the separator
@@ -181,7 +173,6 @@ class Browser(QWidget):
         return head, tail
 
     def sftp_mkdir(self, remote_path):
-        ic()
         creds = get_credentials(self.session_id)
         job_id = create_random_integer()
         queue = create_response_queue(job_id)
@@ -207,7 +198,6 @@ class Browser(QWidget):
         return f
 
     def sftp_rmdir(self, remote_path):
-        ic()
         creds = get_credentials(self.session_id)
         job_id = create_random_integer()
         queue = create_response_queue(job_id)
@@ -231,7 +221,6 @@ class Browser(QWidget):
         return f
 
     def sftp_remove(self, remote_path ):
-        ic()
         creds = get_credentials(self.session_id)
         job_id = create_random_integer()
         queue = create_response_queue(job_id)
@@ -335,9 +324,6 @@ class Browser(QWidget):
         self.table.sortByColumn(logicalIndex, order)
 
     def is_remote_directory(self, partial_remote_path):
-        ic()
-        ic(partial_remote_path)
-
         is_directory = False
         
         try:
@@ -354,9 +340,6 @@ class Browser(QWidget):
             self.message_signal.emit(f"Error in getting credentials or forming remote path: {e}")
             ic(e)
             return False
-
-        ic()
-        ic(remote_path)
 
         # Create job and response queue
         job_id = create_random_integer()
@@ -375,7 +358,6 @@ class Browser(QWidget):
                 self.non_blocking_sleep(100)
             
             response = queue.get_nowait()
-            ic(response)
 
             if response == "error":
                 error = queue.get_nowait()
@@ -387,16 +369,6 @@ class Browser(QWidget):
             attributes = queue.get_nowait()
             if stat.S_ISDIR(attributes.st_mode):
                 is_directory = True
-            
-            #if isinstance(response, dict) and 'attributes' in response:
-            #    attributes = response['attributes']
-            #elif hasattr(response, 'mode'):
-            #    attributes = response
-            #else:
-            #    self.message_signal.emit("Invalid attributes in response.")
-            #    ic("Invalid attributes")
-            #    ic(attributes)
-            #    return False
         
         except queue.Empty:
             self.message_signal.emit("Queue was empty unexpectedly.")
@@ -407,13 +379,11 @@ class Browser(QWidget):
             is_directory = False
         finally:
             delete_response_queue(job_id)
-            ic(is_directory)
             return is_directory
 
 
     def is_remote_file(self, partial_remote_path):
         is_file = False
-        ic()
         
         try:
             # Retrieve credentials once
@@ -442,7 +412,6 @@ class Browser(QWidget):
                 self.non_blocking_sleep(100)
 
             response = queue.get_nowait()
-            ic(response)
 
             if response != "error":
                 attributes = queue.get_nowait()
@@ -462,7 +431,6 @@ class Browser(QWidget):
             is_file = False
 
         finally:
-            ic(is_file)
             delete_response_queue(job_id)
             return is_file
 
@@ -630,7 +598,6 @@ class Browser(QWidget):
             menu.exec_(current_browser.mapToGlobal(point))
 
     def upload_download(self):
-        ic()
         creds = get_credentials(self.session_id)
 
         current_browser = self.focusWidget()
@@ -640,7 +607,6 @@ class Browser(QWidget):
             has_valid_item = False  # Track if any valid items were found
 
             for index in indexes:
-                ic(index)
                 selected_item_text = ""
 
                 if isinstance(index, QModelIndex):

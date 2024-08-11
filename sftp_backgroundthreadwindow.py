@@ -20,21 +20,17 @@ class BackgroundThreadWindow(QMainWindow):
     def add_observee(self,observee):
         if observee not in self.observees:
             self.observees.append(observee)
-            ic("Observee added:", observee)
         else:
             ic("Observee already exists:", observee)
 
     def remove_observee(self,observee):
         if observee in self.observees:
             self.observees.remove(observee)
-            ic("Observer removed:", observee)
 
     def notify_observees(self):
-            ic()
             for observee in self.observees:
                 try:
                     observee.get_files()  # Notify the observer by calling its update method
-                    ic("Observee notified:", observee)
                 except AttributeError as ae:
                     ic("Observee", observee, "does not implement 'get_files' method.", ae)
                 except Exception as e:
