@@ -12,12 +12,19 @@ class FileTableModel(QAbstractTableModel):
         super().__init__()
         self.file_list = []
         self.session_id = session_id
-        # Convert string to Path object if necessary
+        ic("Initializing FileTableModel")
+        
         creds = get_credentials(self.session_id)
-        # ic("init filetablemodel")
-
-        set_credentials(self.session_id, 'current_local_directory', os.getcwd())
-        self.directory = Path(creds.get('current_local_directory'))
+        current_dir = creds.get('current_local_directory')
+        
+        if not current_dir or not os.path.exists(current_dir):
+            current_dir = os.getcwd()
+            ic(f"Setting current directory to: {current_dir}")
+        
+        set_credentials(self.session_id, 'current_local_directory', current_dir)
+        self.directory = Path(current_dir)
+        ic(f"Initial directory set to: {self.directory}")
+        
         self.column_names = ['Name', 'Size', 'Permissions', 'Modified']
         self.get_files()
 
@@ -26,56 +33,35 @@ class FileTableModel(QAbstractTableModel):
         return False
 
     def get_files(self):
-        ic()
+        ic("Getting local files")
         creds = get_credentials(self.session_id)
 
-        # ic("FileTableModel get files")
         self.directory = Path(creds.get('current_local_directory'))
+        ic(f"Current directory: {self.directory}")
 
-        # List all files and directories in the specified path
-        items = list(self.directory.iterdir())
-        # ic(items)
-
-        # Prepare a list to store file information
         self.beginResetModel()
-        self.file_list.clear()
+        self.file_list = []  # Clear the list completely
 
         # Add the '..' entry to represent the parent directory
-        # Assuming that size, permissions, and modified_time for '..' are not relevant, set them to default values
         self.file_list.append(["..", 0, "----", "----"])
 
-        for item in items:
-            # Get file name
-            try:
+        try:
+            items = list(self.directory.iterdir())
+            ic(f"Found {len(items)} items in directory")
+            for item in items:
                 name = item.name
-            except Exception as e:
-                name = None
-
-            # Get file size
-            try:
                 size = item.stat().st_size
-            except Exception as e:
-                size = None
-
-            # Get file permissions
-            try:
                 permissions = oct(item.stat().st_mode)[-4:]
-            except Exception as e:
-                permissions = None
+                modified_time = datetime.datetime.fromtimestamp(item.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+                self.file_list.append([name, size, permissions, modified_time])
+                ic(f"Added item: {name}")
 
-            # Get file modification time and convert it to a readable format
-            try:
-                modified_time = datetime.fromtimestamp(item.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S')
-            except Exception as e:
-                modified_time = None
+            # Sort the file list by name, ignoring case
+            self.file_list[1:] = sorted(self.file_list[1:], key=lambda x: x[0].lower())
+        except Exception as e:
+            ic(f"Error getting files: {str(e)}")
 
-            # Append the file information to the list
-            self.file_list.append([name, size, permissions, modified_time])
-
-        # Emit signal to update the view
-        top_left = self.createIndex(0, 0)  # Top left cell of the table
-        bottom_right = self.createIndex(self.rowCount() - 1, self.columnCount() - 1)  # Bottom right cell
-        self.dataChanged.emit(top_left, bottom_right)
+        ic(f"Total items in file_list: {len(self.file_list)}")
         self.endResetModel()
         self.layoutChanged.emit()
 

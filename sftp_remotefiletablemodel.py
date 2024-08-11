@@ -33,15 +33,7 @@ class RemoteFileTableModel(QAbstractTableModel):
         return len(self.column_names)
 
     def refresh_file_list(self):
-        creds = get_credentials(self.session_id)
-        sftp = creds.get('sftp')
-        if sftp:
-            try:
-                remote_path = creds.get('current_remote_directory', '.')
-                self.file_list = sftp.listdir_attr(remote_path)
-                self.layoutChanged.emit()
-            except Exception as e:
-                print(f"Error refreshing file list: {str(e)}")
+        self.get_files()  # Call get_files to completely refresh the file list
 
 
     def data(self, index, role=Qt.DisplayRole):
@@ -154,7 +146,7 @@ class RemoteFileTableModel(QAbstractTableModel):
         logger.debug(f"Current remote directory: {current_remote_directory}")
 
         self.beginResetModel()
-        self.file_list.clear()
+        self.file_list = []  # Clear the list completely
 
         # Always add the '..' entry
         self.file_list.append(("..", 0, "----", "----"))
@@ -174,6 +166,8 @@ class RemoteFileTableModel(QAbstractTableModel):
                 self.file_list.append((name, size, permissions, modified_time))
                 logger.debug(f"Added file to list: {name}")
         
+            # Sort the file list by name, ignoring case
+            self.file_list[1:] = sorted(self.file_list[1:], key=lambda x: x[0].lower())
         except Exception as e:
             logger.error(f"Error fetching remote files: {str(e)}")
             # You might want to emit a signal here to inform the user about the error
@@ -182,6 +176,10 @@ class RemoteFileTableModel(QAbstractTableModel):
         self.endResetModel()
         self.layoutChanged.emit()
         logger.debug("Exiting get_files method")
+
+    def refresh_file_list(self):
+        logger.debug("Refreshing file list")
+        self.get_files()
 
     def non_blocking_sleep(self, ms):
         # sleep function that shouldn't block any other threads

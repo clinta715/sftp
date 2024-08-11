@@ -66,7 +66,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
                 delegate = AppDelegate.alloc().init()
                 NSApplication.sharedApplication().setDelegate_(delegate)
             except ImportError:
-                logging.warning("Failed to import Foundation or AppKit. Secure coding for restorable state is not enabled.")
+                print("Failed to import Foundation or AppKit. Secure coding for restorable state is not enabled.")
         # Custom data structure to store hostname, username, and password together
         self.create_initial_data()
         self.host_data = {
@@ -583,11 +583,16 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         except Exception as e:
             print(f"Error during cleanup: {str(e)}")
         finally:
-            # Give some time for background processes to finish
-            QApplication.processEvents()
-            
-        # Use QCoreApplication.exit() instead of QCoreApplication.quit()
-        QCoreApplication.exit(0)
+            # Set a timeout for the cleanup process
+            QTimer.singleShot(5000, self.force_exit)
+
+    def force_exit(self):
+        print("Forcing application exit...")
+        QCoreApplication.instance().quit()
+
+    def closeEvent(self, event):
+        QTimer.singleShot(0, self.cleanup)  # Start cleanup on next event loop iteration
+        event.accept()
 
     def save_connection_data(self):
         data = {
@@ -609,24 +614,28 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
             self.encryption_key = data.get("encryption_key", Fernet.generate_key()).encode()
             self.cipher_suite = Fernet(self.encryption_key)
 
-            self.host_data["hostnames"] = data["hostnames"]
-            self.host_data["usernames"] = data["usernames"]
-            self.host_data["passwords"] = {k: self.cipher_suite.decrypt(v.encode()).decode() for k, v in data["passwords"].items()}
-            self.host_data["ports"] = data["ports"]
+            self.host_data["hostnames"] = data.get("hostnames", {})
+            self.host_data["usernames"] = data.get("usernames", {})
+            self.host_data["passwords"] = {k: self.cipher_suite.decrypt(v.encode()).decode() for k, v in data.get("passwords", {}).items()}
+            self.host_data["ports"] = data.get("ports", {})
             self.hostnames = list(self.host_data["hostnames"].keys())
             
             # Only update the completer if hostname_combo exists
             if hasattr(self, 'hostname_combo'):
                 self.update_completer()
         except FileNotFoundError:
-            # If the file doesn't exist, generate a new encryption key
+            # If the file doesn't exist, generate a new encryption key and create an empty structure
             self.encryption_key = Fernet.generate_key()
             self.cipher_suite = Fernet(self.encryption_key)
+            self.host_data = {"hostnames": {}, "usernames": {}, "passwords": {}, "ports": {}}
+            self.hostnames = []
         except Exception as e:
             print(f"Error loading connection data: {str(e)}")
-            # If there's any error, generate a new encryption key
+            # If there's any error, generate a new encryption key and create an empty structure
             self.encryption_key = Fernet.generate_key()
             self.cipher_suite = Fernet(self.encryption_key)
+            self.host_data = {"hostnames": {}, "usernames": {}, "passwords": {}, "ports": {}}
+            self.hostnames = []
 
 def main():
     # Parse command line arguments
@@ -683,26 +692,10 @@ def main():
         except Exception as e:
             print(f"Error connecting: {str(e)}")
 
-    def signal_handler(sig, frame):
-        # Ctrl+C pressed, cleaning up and exiting...
-        main_window.cleanup()
-        QCoreApplication.exit(0)
-
-    # Set up the signal handler for SIGINT (Ctrl+C)
-    import signal
-    signal.signal(signal.SIGINT, signal_handler)
-
     # Connect the aboutToQuit signal directly to the cleanup method
     app.aboutToQuit.connect(main_window.cleanup)
 
-    try:
-        exit_code = app.exec_()
-    finally:
-        # Ensure all threads are stopped and resources are released
-        main_window.cleanup()
-        QCoreApplication.processEvents()
-    
-    sys.exit(exit_code)
+    sys.exit(app.exec_())
 
 if __name__ == "__main__":
     main()

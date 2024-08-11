@@ -161,7 +161,10 @@ class DownloadWorker(QRunnable):
             self.ssh.connect(self.hostname, self.port, self.username, self.password)
             self.sftp = self.ssh.open_sftp()
 
-            if self.is_source_remote and not self.is_destination_remote:
+            if self.command in ["mkdir", "rmdir", "remove", "listdir", "listdir_attr", "chdir", "stat", "getcwd", "close"]:
+                logging.info(f"Executing remote command '{self.command}' for transfer {self.transfer_id}")
+                self.execute_remote_command()
+            elif self.is_source_remote and not self.is_destination_remote:
                 # Download from remote to local
                 self.signals.message.emit(self.transfer_id, f"Downloading {self.job_source} to {self.job_destination}")
                 self.sftp.get(self.job_source, self.job_destination, callback=self.progress)
@@ -169,9 +172,8 @@ class DownloadWorker(QRunnable):
                 # Upload from local to remote
                 self.signals.message.emit(self.transfer_id, f"Uploading {self.job_source} to {self.job_destination}")
                 self.sftp.put(self.job_source, self.job_destination, callback=self.progress)
-            elif self.is_source_remote and self.is_destination_remote:
-                logging.info(f"Executing remote command for transfer {self.transfer_id}")
-                self.execute_remote_command()
+            else:
+                raise ValueError(f"Invalid operation: source_remote={self.is_source_remote}, destination_remote={self.is_destination_remote}")
 
         except socket.gaierror as e:
             error_msg = f"Hostname resolution failed for {self.hostname}. Please check the hostname. Error: {str(e)}"
@@ -241,6 +243,9 @@ class DownloadWorker(QRunnable):
                 self.put_response("success", "SFTP connection closed")
             else:
                 raise ValueError(f"Unknown command: {self.command}")
+            
+            # Emit a message signal for successful operations
+            self.signals.message.emit(self.transfer_id, f"{self.command.capitalize()} operation completed successfully")
         except Exception as e:
             self.signals.message.emit(self.transfer_id, f"{self.command} operation failed: {str(e)}")
             self.put_response("error", str(e))
