@@ -112,42 +112,6 @@ class RemoteFileTableModel(QAbstractTableModel):
                 return QVariant(font)  # Return bold font for directories
 
         return None
-        if not index.isValid() or not (0 <= index.row() < len(self.file_list)):
-            return QVariant()
-
-        try:
-            file = self.file_list[index.row()]
-        except Exception as e:
-            pass
-
-        column = index.column()
-
-        if role == Qt.DisplayRole:
-            if column == 0:
-                try:
-                    return file[0]  # name
-                except Exception as e:
-                    pass
-                    return ""
-            elif column == 1:
-                try:
-                    return str(file[1])  # size
-                except Exception as e:
-                    pass
-                    return ""
-            elif column == 2:
-                try:
-                    return file[2]  # permissions
-                except Exception as e:
-                    pass
-                    return ""
-            elif column == 3:
-                try:
-                    return file[3]  # modified_date
-                except Exception as e:
-                    pass
-                    return ""
-        return QVariant()
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if role == Qt.DisplayRole and orientation == Qt.Horizontal:
