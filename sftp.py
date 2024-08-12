@@ -119,6 +119,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         self.edit_button = QPushButton("Edit Host Data")
         self.transfers_button = QPushButton("Show/Hide Transfers")
         self.clear_queue_button = QPushButton("Clear Queue")
+        self.transfers = {}  # Dictionary to store active transfers
 
         # Initialize hostname combo box
         self.hostname_combo = CustomComboBox(self)  # Pass self as parent
@@ -158,7 +159,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         # Create global output console
         self.global_output_console = QTextEdit()
         self.global_output_console.setReadOnly(True)
-        self.global_output_console.setMaximumHeight(150)  # Limit the height
+        self.global_output_console.setMaximumHeight(100)  # Reduced height from 150 to 100
         
         # Add the global output console to the layout
         self.top_layout.addWidget(self.global_output_console)
@@ -300,8 +301,8 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         self.title = self.get_session_title(self.session_id)
         
         # print("call setup_left_browser")
-        self.setup_left_browser( self.session_id )
-        self.setup_right_browser( self.session_id )
+        self.setup_left_browser(self.session_id)
+        self.setup_right_browser(self.session_id)
         # Create tab-specific output console
         tab_output_console = QTextEdit()
         tab_output_console.setReadOnly(True)
@@ -316,6 +317,16 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         self.tab_widget.addTab(container_widget, tab_title)
 
         self.log_connection_success()  # Ensure this method is implemented
+
+    def create_cancel_button(self, transfer_id):
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(lambda: self.cancel_transfer(transfer_id))
+        return cancel_button
+
+    def cancel_transfer(self, transfer_id):
+        if transfer_id in self.transfers:
+            self.transfers[transfer_id].download_worker._stop_flag = True
+            self.message_signal.emit(f"Cancelling transfer {transfer_id}")
 
     def initialize_session_credentials(self, session_id):
         self.session_id = session_id
@@ -565,32 +576,54 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         }
         
     def cleanup(self):
-        try:
-            # Close all open SFTP connections
-            for i in range(self.tab_widget.count()):
-                widget = self.tab_widget.widget(i)
-                if hasattr(widget, 'right_browser'):
-                    widget.right_browser.close_sftp_connection()
-            
-            # Clear the transfer queue
-            sftp_queue_clear()
-            
-            # Signal the background thread to stop
-            add_sftp_job(".", False, ".", False, "localhost", "guest", "guest", 69, "end", 69)
+        self.cleanup_tasks = [
+            self.close_sftp_connections,
+            self.clear_transfer_queue,
+            self.stop_background_thread,
+            self.save_connection_data
+        ]
+        self.current_task = 0
+        self.perform_next_cleanup_task()
 
-            # Save connection data before exiting
-            self.save_connection_data()
-        except Exception as e:
-            print(f"Error during cleanup: {str(e)}")
-        finally:
-            # Set a timeout for the cleanup process
-            QTimer.singleShot(5000, self.force_exit)
+    def perform_next_cleanup_task(self):
+        if self.current_task < len(self.cleanup_tasks):
+            task = self.cleanup_tasks[self.current_task]
+            try:
+                task()
+            except Exception as e:
+                print(f"Error during {task.__name__}: {str(e)}")
+            finally:
+                self.current_task += 1
+                QTimer.singleShot(100, self.perform_next_cleanup_task)
+        else:
+            print("All cleanup tasks completed.")
+            QCoreApplication.instance().quit()
 
-    def force_exit(self):
-        print("Forcing application exit...")
-        QCoreApplication.instance().quit()
+    def close_sftp_connections(self):
+        for i in range(self.tab_widget.count()):
+            widget = self.tab_widget.widget(i)
+            if hasattr(widget, 'right_browser'):
+                widget.right_browser.close_sftp_connection()
+
+    def clear_transfer_queue(self):
+        sftp_queue_clear()
+
+    def stop_background_thread(self):
+        add_sftp_job(".", False, ".", False, "localhost", "guest", "guest", 69, "end", 69)
+
+    def save_connection_data(self):
+        super().save_connection_data()
 
     def closeEvent(self, event):
+        if self.backgroundThreadWindow.active_transfers > 0:
+            reply = QMessageBox.question(
+                self, 'Confirm Exit',
+                'There are active file transfers. Are you sure you want to exit?',
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+            )
+            if reply == QMessageBox.No:
+                event.ignore()
+                return
         QTimer.singleShot(0, self.cleanup)  # Start cleanup on next event loop iteration
         event.accept()
 

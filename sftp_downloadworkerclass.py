@@ -7,6 +7,7 @@ import queue
 import base64
 import socket
 import logging
+import os
 
 # Set up logging
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -149,9 +150,9 @@ class DownloadWorker(QRunnable):
     def progress(self, transferred: int, tobe_transferred: int):
         # """Return progress every 50 MB"""
         if self._stop_flag:
-            raise Exception("Transfer interrupted")
+            raise Exception("Transfer cancelled")
         percentage = round((float(transferred) / float(tobe_transferred)) * 100)
-        self.signals.progress.emit(self.transfer_id,percentage)
+        self.signals.progress.emit(self.transfer_id, percentage)
 
     def run(self):
         try:
@@ -167,11 +168,11 @@ class DownloadWorker(QRunnable):
             elif self.is_source_remote and not self.is_destination_remote:
                 # Download from remote to local
                 self.signals.message.emit(self.transfer_id, f"Downloading {self.job_source} to {self.job_destination}")
-                self.sftp.get(self.job_source, self.job_destination, callback=self.progress)
+                self.download_file()
             elif self.is_destination_remote and not self.is_source_remote:
                 # Upload from local to remote
                 self.signals.message.emit(self.transfer_id, f"Uploading {self.job_source} to {self.job_destination}")
-                self.sftp.put(self.job_source, self.job_destination, callback=self.progress)
+                self.upload_file()
             else:
                 raise ValueError(f"Invalid operation: source_remote={self.is_source_remote}, destination_remote={self.is_destination_remote}")
 
@@ -209,6 +210,38 @@ class DownloadWorker(QRunnable):
             if hasattr(self, 'ssh'):
                 self.ssh.close()
             self.signals.finished.emit(self.transfer_id)
+
+    def download_file(self):
+        chunk_size = 32768  # 32 KB chunks
+        with self.sftp.open(self.job_source, 'rb') as remote_file:
+            file_size = remote_file.stat().st_size
+            with open(self.job_destination, 'wb') as local_file:
+                transferred = 0
+                while True:
+                    if self._stop_flag:
+                        raise Exception("Transfer cancelled")
+                    chunk = remote_file.read(chunk_size)
+                    if not chunk:
+                        break
+                    local_file.write(chunk)
+                    transferred += len(chunk)
+                    self.progress(transferred, file_size)
+
+    def upload_file(self):
+        chunk_size = 32768  # 32 KB chunks
+        file_size = os.path.getsize(self.job_source)
+        with open(self.job_source, 'rb') as local_file:
+            with self.sftp.open(self.job_destination, 'wb') as remote_file:
+                transferred = 0
+                while True:
+                    if self._stop_flag:
+                        raise Exception("Transfer cancelled")
+                    chunk = local_file.read(chunk_size)
+                    if not chunk:
+                        break
+                    remote_file.write(chunk)
+                    transferred += len(chunk)
+                    self.progress(transferred, file_size)
 
     def execute_remote_command(self):
         try:
