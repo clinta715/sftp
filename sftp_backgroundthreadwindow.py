@@ -1,19 +1,13 @@
-from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QListWidget, QTextEdit, QProgressBar, QSizePolicy, QScrollArea, QLabel
-from PyQt5.QtCore import QThreadPool, QTimer, Qt, QThread, pyqtSignal, QObject  # Import QObject
+from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QListWidget, QTextEdit, QProgressBar, QSizePolicy
+from PyQt5.QtCore import QThreadPool, QTimer
 from icecream import ic
 import os
-import time
 
 from sftp_downloadworkerclass import Transfer, DownloadWorker, sftp_queue_get, sftp_queue_isempty
 
 MAX_TRANSFERS = 4
 
 queue_display = []
-
-class TransferSignals(QObject):
-    progress = pyqtSignal(int, int, str, int)  # id, value, filename, total_size
-    finished = pyqtSignal(int)
-    message = pyqtSignal(int, str)
 
 class BackgroundThreadWindow(QMainWindow):
     def __init__(self):
@@ -22,56 +16,55 @@ class BackgroundThreadWindow(QMainWindow):
         self.transfers = []
         self.observees = []
         self.init_ui()
-        self.last_update_time = time.time()  # Time of last speed update
 
     def add_observee(self,observee):
         if observee not in self.observees:
             self.observees.append(observee)
+            ic("Observee added:", observee)
         else:
             ic("Observee already exists:", observee)
 
     def remove_observee(self,observee):
         if observee in self.observees:
             self.observees.remove(observee)
+            ic("Observer removed:", observee)
 
     def notify_observees(self):
+            ic()
             for observee in self.observees:
                 try:
                     observee.get_files()  # Notify the observer by calling its update method
+                    ic("Observee notified:", observee)
                 except AttributeError as ae:
                     ic("Observee", observee, "does not implement 'get_files' method.", ae)
                 except Exception as e:
                     ic("An error occurred while notifying observee", observee, e)
 
     def init_ui(self):
+        size_policy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        size_policy.setHorizontalStretch(1)
+        size_policy.setVerticalStretch(1)
+
         self.layout = QVBoxLayout()
 
         self.list_widget = QListWidget()
         self.layout.addWidget(self.list_widget)
 
         self.text_console = QTextEdit()
-        self.text_console.setReadOnly(True)
-        self.text_console.setMaximumHeight(100)  # Limit the height of the console
+        self.text_console.setReadOnly(True)  # Make the text console read-only
+        self.text_console.setSizePolicy(size_policy)
         self.text_console.textChanged.connect(self.scroll_to_bottom)
         self.layout.addWidget(self.text_console)
-
-        # Create a scroll area for transfers
-        self.scroll_area = QScrollArea()
-        self.scroll_area.setWidgetResizable(True)
-        self.transfer_widget = QWidget()
-        self.transfer_layout = QVBoxLayout(self.transfer_widget)
-        self.scroll_area.setWidget(self.transfer_widget)
-        self.layout.addWidget(self.scroll_area)
 
         central_widget = QWidget()
         central_widget.setLayout(self.layout)
         self.setCentralWidget(central_widget)
 
         self.thread_pool = QThreadPool.globalInstance()
-        self.thread_pool.setMaxThreadCount(MAX_TRANSFERS)
+        # Setup a QTimer to periodically check the queue
         self.check_queue_timer = QTimer(self)
         self.check_queue_timer.timeout.connect(self.check_and_start_transfers)
-        self.check_queue_timer.start(100)
+        self.check_queue_timer.start(100)  # Check every 1000 ms (1 second)
 
     def remove_queue_item_by_id(self, id_to_remove):
         global queue_display
@@ -103,17 +96,24 @@ class BackgroundThreadWindow(QMainWindow):
         vertical_scroll_bar.setValue(vertical_scroll_bar.maximum())
 
     def check_and_start_transfers(self):
-        while not sftp_queue_isempty() and self.active_transfers < MAX_TRANSFERS:
-            job = sftp_queue_get()
-            if job.command == "end":
-                self._stop_flag = 1
-                break
-            else:
-                self.start_transfer(job.id, job.source_path, job.destination_path, 
-                                    job.is_source_remote, job.is_destination_remote, 
-                                    job.hostname, job.port, job.username, job.password, job.command)
+        # Check if more transfers can be started
+        if sftp_queue_isempty() or self.active_transfers == MAX_TRANSFERS:
+            return
+        else:
+            job = sftp_queue_get()  # Wait for 5 seconds for a job
 
         self.populate_queue_list()
+
+        if job.command == "end":
+            self._stop_flag = 1
+        else:
+            hostname = job.hostname
+            password = job.password
+            port = job.port
+            username = job.username
+            command = job.command
+
+            self.start_transfer(job.id, job.source_path, job.destination_path, job.is_source_remote, job.is_destination_remote, hostname, port, username, password, command )
 
     def start_transfer(self, transfer_id, job_source, job_destination, is_source_remote, is_destination_remote, hostname, port, username, password, command):
         # Create a horizontal layout for the progress bar and cancel button
@@ -134,25 +134,14 @@ class BackgroundThreadWindow(QMainWindow):
         cancel_button.clicked.connect(lambda: self.transfer_finished(transfer_id))
         hbox.addWidget(cancel_button, 1)  # Add it to the layout with a stretch factor of 1
 
-        # Create a label to show speed
-        self.speed_label = QLabel()
-        hbox.addWidget(self.speed_label)
-
-        # Create a label to show the estimated time remaining
-        self.time_label = QLabel()
-        hbox.addWidget(self.time_label)
-
-        # Add the horizontal layout to the transfer layout instead of the main layout
-        self.transfer_layout.addLayout(hbox)
-
-        # Adjust the window size if needed
-        self.adjust_window_size()
+        # Add the horizontal layout to the main layout
+        self.layout.addLayout(hbox)
 
         # Store references to the widgets for later use
-        new_transfer = Transfer(transfer_id=transfer_id, download_worker=DownloadWorker(transfer_id, job_source, job_destination, is_source_remote, is_destination_remote, hostname, port, username, password, command), active=True, hbox=hbox, progress_bar=progress_bar, cancel_button=cancel_button, tbox=textbox, speed_label=self.speed_label, time_label=self.time_label)
+        new_transfer = Transfer(transfer_id=transfer_id, download_worker=DownloadWorker(transfer_id, job_source, job_destination, is_source_remote, is_destination_remote, hostname, port, username, password, command), active=True, hbox=hbox, progress_bar=progress_bar, cancel_button=cancel_button, tbox=textbox)
 
         # Create and configure the download worker
-        new_transfer.download_worker.signals.progress.connect(lambda tid, val, filename, total_size: self.update_progress(tid, val, filename, total_size))
+        new_transfer.download_worker.signals.progress.connect(lambda tid, val: self.update_progress(tid, val))
         new_transfer.download_worker.signals.finished.connect(lambda tid: self.transfer_finished(tid))
         new_transfer.download_worker.signals.message.connect(lambda tid, msg: self.update_text_console(tid, msg))
 
@@ -215,54 +204,12 @@ class BackgroundThreadWindow(QMainWindow):
         if message:
             self.text_console.append(f"{message}")
 
-    def update_progress(self, transfer_id, value, filename, total_size):
+    def update_progress(self, transfer_id, value):
         # Find the transfer with the given transfer_id
         transfer = next((t for t in self.transfers if t.transfer_id == transfer_id), None)
 
         if transfer and transfer.progress_bar:
             # Update the progress bar's value
             transfer.progress_bar.setValue(value)
-            # Update the speed and estimated time labels
-            self.update_speed_and_time(transfer, value, filename, total_size)
         else:
             self.text_console.append(f"update_progress() No active transfer found with ID {transfer_id}")
-
-    def update_speed_and_time(self, transfer, value, filename, total_size):
-        current_time = time.time()
-        time_elapsed = current_time - self.last_update_time
-        if time_elapsed >= 1:  # Update speed every second
-            bytes_transferred = value * total_size // 100
-            speed = bytes_transferred / time_elapsed  # Speed in bytes per second
-            self.last_update_time = current_time
-
-            speed_string = self.format_bytes(speed) + "/s"
-            transfer.speed_label.setText(f"Speed: {speed_string}")
-
-            if value < 100:
-                remaining_time = (total_size - bytes_transferred) / speed if speed > 0 else 0
-                time_remaining_string = self.format_time(remaining_time)
-                transfer.time_label.setText(f"Time Left: {time_remaining_string}")
-            else:
-                transfer.time_label.setText(f"Time Left: 00:00:00")
-
-    def format_bytes(self, bytes):
-        """Formats bytes into a human-readable string."""
-        units = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"]
-        i = 0
-        while bytes >= 1024 and i < len(units) - 1:
-            bytes /= 1024
-            i += 1
-        return f"{bytes:.2f}{units[i]}"
-
-    def format_time(self, seconds):
-        """Formats seconds into a HH:MM:SS string."""
-        minutes, seconds = divmod(seconds, 60)
-        hours, minutes = divmod(minutes, 60)
-        return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
-
-    def adjust_window_size(self):
-        # Calculate the ideal height based on the number of transfers
-        ideal_height = 200 + (len(self.transfers) * 75)  # 200 for other widgets, 50 per transfer
-        max_height = 600  # Set a maximum height
-        new_height = min(ideal_height, max_height)
-        self.resize(self.width(), new_height)
