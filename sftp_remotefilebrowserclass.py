@@ -23,19 +23,6 @@ class RemoteFileBrowser(FileBrowser):
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
 
-    def refresh_file_list(self):
-        self.model.refresh_file_list()
-
-    # Override any file operation methods (like delete, rename, etc.) to call refresh_file_list
-    def delete_file(self, filename):
-        # Implement your delete logic here
-        # ...
-        # After successful deletion:
-        self.refresh_file_list()
-
-    # Add similar overrides for other file operations
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        
         # Connect double-click event to double_click_handler
         self.table.doubleClicked.connect(self.double_click_handler)
         
@@ -534,3 +521,10 @@ class RemoteFileBrowser(FileBrowser):
 
         finally:
             self.notify_observers()
+
+    def adjust_window_size(self):
+        # Calculate the ideal height based on the number of transfers
+        ideal_height = 200 + (len(self.transfers) * 75)  # 200 for other widgets, 50 per transfer
+        max_height = 600  # Set a maximum height
+        new_height = min(ideal_height, max_height)
+        self.resize(self.width(), new_height)

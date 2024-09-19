@@ -54,15 +54,18 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         # Set up NSApplicationDelegate
         if sys.platform == 'darwin':
             try:
-                from Foundation import NSObject
                 from AppKit import NSApplication
+                from Foundation import NSObject, NSURL
                 class AppDelegate(NSObject):
                     def applicationSupportsSecureRestorableState_(self, app):
                         return True
                     
                     def application_openURLs_(self, app, urls):
                         # Handle the URLs here
-                        pass
+                        for url in urls:
+                            urlString = url.absoluteString()
+                            print(f"URL opened: {urlString}")
+                            # ... Process the URL ... 
                 delegate = AppDelegate.alloc().init()
                 NSApplication.sharedApplication().setDelegate_(delegate)
             except ImportError:

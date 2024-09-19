@@ -7,14 +7,14 @@ import stat
 import os
 from icecream import ic
 from pathlib import Path
+import subprocess  # Import subprocess for opening files
 
 from sftp_creds import get_credentials, create_random_integer, set_credentials
 from sftp_downloadworkerclass import create_response_queue, delete_response_queue, check_response_queue, add_sftp_job, QueueItem, queue
-# from sftp_backgroundthreadwindow import queue_display_append
 
 class Browser(QWidget):
     def __init__(self, title, session_id, parent=None):
-        super().__init__(parent)  # Initialize the QWidget parent class
+        super().__init__(parent)  
         self.observers = []
         self.title = title
         self.model = None
@@ -22,6 +22,7 @@ class Browser(QWidget):
         self.user_choice = None
         self.init_global_creds()
         self.init_ui()
+        self.always_continue_upload = False  # Initialize always_continue_upload
 
     def init_global_creds(self):
         creds = get_credentials(self.session_id)
@@ -65,7 +66,7 @@ class Browser(QWidget):
         self.table.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.table.sortByColumn(0, Qt.AscendingOrder)
 
-        self.layout.addWidget(self.table)  # Correctly add the table to the layout
+        self.layout.addWidget(self.table)  
         # Add the table and status bar to the layout
         self.progressBar = QProgressBar()
         self.layout.addWidget(self.progressBar)
@@ -435,25 +436,18 @@ class Browser(QWidget):
             return is_file
 
     def waitjob(self, job_id):
-        # Initialize the progress bar
         self.progressBar.setRange(0, 100)
         self.progressBar.setValue(0)
 
         progress_value = 0
         while not check_response_queue(job_id):
-            # Increment progress by 10%, up to 100%
             progress_value = min(progress_value + 10, 100)
             self.progressBar.setValue(progress_value)
-
-            # Sleep and process events to keep UI responsive
             self.non_blocking_sleep(100)
-            QApplication.processEvents()  # Process any pending GUI events
+            QApplication.processEvents()
 
-        # Reset the progress bar after completion
         self.progressBar.setValue(100)
         self.progressBar.setRange(0, 100)
-
-        # Return after the job is done
         return
 
     def focusInEvent(self, event):
@@ -539,72 +533,60 @@ class Browser(QWidget):
             self.message_signal.emit(f"change_directory() {e}")
 
     def double_click_handler(self, index):
-        # this function tries to figure out, more or less sans a lot of context, what 'index' is pointing at and then, what to do with it
-        # my logic here was, if its a directory change to it, if its a file transfer it
-        # if its a local file, probably want to upload it, if its a remote file, probably want to download it
         creds = get_credentials(self.session_id)
 
         if index.isValid():
-            # Retrieve the data from the model
             path = self.model.data(index, Qt.DisplayRole)
-            # Now you can use 'text' as needed
 
         try:
             if path == "..":
                 head, tail = self.split_path(creds.get('current_local_directory'))
                 new_path = head
-                # ic(new_path)
             else:
-                new_path = os.path.join(creds.get('current_local_directory'), path)  # Assuming the text of the item contains the file path
+                new_path = os.path.join(creds.get('current_local_directory'), path)
 
-            # Check if the item is a directory
             is_directory = os.path.isdir(new_path)
             if is_directory:
-                # Change the current working directory or perform other actions
                 self.change_directory(new_path)
             else:
-                # Upload the file to the remote server
-                remote_path, _ = QFileDialog.getSaveFileName(self, "Select Remote Location", os.path.basename(path))
-                if remote_path:
-                    self.upload_download(new_path)
+                if self.is_remote_browser():
+                    remote_path, _ = QFileDialog.getSaveFileName(self, "Select Local Location", os.path.basename(path))
+                    if remote_path:
+                        self.upload_download(remote_path, path)
+                else:
+                    remote_path, _ = QFileDialog.getSaveFileName(self, "Select Remote Location", os.path.basename(path))
+                    if remote_path:
+                        self.upload_download(new_path, remote_path)
 
         except Exception as e:
-            # Append error message to the output_console
             self.message_signal.emit(f"double_click_handler() {e}")
 
     def context_menu_handler(self, point):
-        # If point is not provided, use the center of the list widget
-        if not point:
-            point = self.file_list.rect().center()
-
-        # Get the currently focused widget
         current_browser = self.focusWidget()
         if current_browser is not None:
             menu = QMenu(self)
-            # Add actions to the menu
             remove_dir_action = menu.addAction("Remove Directory")
-            change_dir_action = menu.addAction("Change Directory")  # New action
+            change_dir_action = menu.addAction("Change Directory") 
             upload_download_action = menu.addAction("Upload/Download")
             prompt_and_create_directory = menu.addAction("Create Directory")
             view_action = menu.addAction("View")
 
-            # Connect the actions to corresponding methods
             remove_dir_action.triggered.connect(self.remove_directory_with_prompt)
-            change_dir_action.triggered.connect(self.change_directory_handler)  # Connect to the new method
+            change_dir_action.triggered.connect(self.change_directory_handler)  
             upload_download_action.triggered.connect(self.upload_download)
             prompt_and_create_directory.triggered.connect(self.prompt_and_create_directory)
             view_action.triggered.connect(self.view_item)
-            # Show the menu at the cursor position
+
             menu.exec_(current_browser.mapToGlobal(point))
 
-    def upload_download(self):
+    def upload_download(self, remote_path=None, local_path=None):
         creds = get_credentials(self.session_id)
 
         current_browser = self.focusWidget()
 
         if current_browser is not None and isinstance(current_browser, QTableView):
             indexes = current_browser.selectedIndexes()
-            has_valid_item = False  # Track if any valid items were found
+            has_valid_item = False
 
             for index in indexes:
                 selected_item_text = ""
@@ -616,25 +598,58 @@ class Browser(QWidget):
                     selected_item_text = index
 
                 if selected_item_text:
-                    # Construct the full path of the selected item
                     if not self.is_complete_path(selected_item_text):
-                        selected_path = os.path.join(creds.get('current_local_directory'), selected_item_text)
+                        if self.is_remote_browser():
+                            # Downloading from remote to local
+                            if remote_path is None:
+                                remote_path, _ = QFileDialog.getSaveFileName(self, "Select Local Location", selected_item_text)
+                                if remote_path is None:
+                                    return
+                            selected_path = self.get_normalized_remote_path(creds.get('current_remote_directory'), selected_item_text)
+                        else:
+                            # Uploading from local to remote
+                            if local_path is None:
+                                local_path, _ = QFileDialog.getOpenFileName(self, "Select Local File", "", "All Files (*.*)")
+                                if local_path is None:
+                                    return
+                            selected_path = os.path.join(creds.get('current_local_directory'), selected_item_text)
+                            remote_path = self.get_normalized_remote_path(creds.get('current_remote_directory'), selected_item_text)
                     else:
-                        selected_path = self.normalize_path(selected_item_text)
+                        if self.is_remote_browser():
+                            # Downloading from remote to local
+                            selected_path = self.get_normalized_remote_path(selected_item_text)
+                            if remote_path is None:
+                                remote_path, _ = QFileDialog.getSaveFileName(self, "Select Local Location", selected_item_text)
+                                if remote_path is None:
+                                    return
+                        else:
+                            # Uploading from local to remote
+                            selected_path = self.normalize_path(selected_item_text)
+                            if local_path is None:
+                                local_path, _ = QFileDialog.getOpenFileName(self, "Select Local File", "", "All Files (*.*)")
+                                if local_path is None:
+                                    return
+                            remote_path = self.get_normalized_remote_path(creds.get('current_remote_directory'), selected_item_text)
 
                     try:
-                        remote_entry_path = self.get_normalized_remote_path(creds.get('current_remote_directory'), selected_item_text)
-
                         if os.path.isdir(selected_path):
-                            self.message_signal.emit(f"Uploading directory: {selected_path}")
-                            self.upload_directory(selected_path, remote_entry_path)
+                            self.message_signal.emit(f"Transferring directory: {selected_path}")
+                            if self.is_remote_browser():
+                                self.download_directory(selected_path, remote_path)
+                            else:
+                                self.upload_directory(selected_path, remote_path)
                         else:
-                            self.message_signal.emit(f"Uploading file: {selected_path}")
+                            if self.is_remote_browser():
+                                self.message_signal.emit(f"Downloading file: {selected_path}")
+                            else:
+                                self.message_signal.emit(f"Uploading file: {selected_path}")
                             job_id = create_random_integer()
                             queue_item = QueueItem(os.path.basename(selected_path), job_id)
-                            # queue_display.append(queue_item)
-                            add_sftp_job(selected_path, False, remote_entry_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "upload", job_id)
-                        has_valid_item = True  # Mark as valid item found
+                            if self.is_remote_browser():
+                                add_sftp_job(selected_path, True, remote_path, False, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "download", job_id)
+                            else:
+                                add_sftp_job(selected_path, False, remote_path, True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "upload", job_id)
+                        has_valid_item = True 
                     except Exception as e:
                         self.message_signal.emit(f"upload_download() encountered an error: {e}")
                 else:
@@ -644,6 +659,56 @@ class Browser(QWidget):
                 self.message_signal.emit("No valid items selected.")
         else:
             self.message_signal.emit("Current browser is not a valid QTableView.")
+
+    def download_directory(self, remote_directory, local_directory, always=0):
+        self.always = always
+        creds = get_credentials(self.session_id)
+        try:
+            local_folder = local_directory
+
+            target_exists = os.path.isdir(local_folder)
+
+            if target_exists and not self.always:
+                response = self.show_prompt_dialog(f"The folder {local_folder} already exists. Do you want to continue downloading?", "Download Confirmation")
+
+                if response == QMessageBox.No:
+                    return
+                elif response == QMessageBox.Yes:
+                    pass  # Continue with the download
+                elif response == QMessageBox.YesToAll:
+                    self.always = 1
+                else:
+                    return
+            else:
+                try:
+                    os.makedirs(local_folder, exist_ok=True)
+                except Exception as e:
+                    self.message_signal.emit(f"{e}")
+                    pass
+
+            remote_contents = self.sftp_listdir(remote_directory)
+
+            if not remote_contents:
+                self.message_signal.emit(f"No files found in {remote_directory}")
+                return
+
+            for entry in remote_contents:
+                remote_entry_path = self.get_normalized_remote_path(remote_directory, entry)
+                local_entry_path = os.path.join(local_folder, entry)
+
+                job_id = create_random_integer()
+
+                if self.is_remote_directory(remote_entry_path):
+                    self.download_directory(remote_entry_path, local_entry_path, self.always)
+                else:
+                    queue_item = QueueItem( os.path.basename(entry), job_id )
+                    add_sftp_job(remote_entry_path, True, local_entry_path, False, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "download", job_id)
+
+        except Exception as e:
+            self.message_signal.emit(f"download_directory() {e}")
+
+        finally:
+            self.notify_observers()
 
     def upload_directory(self, source_directory, destination_directory, always=0):
         self.always = always
@@ -658,16 +723,12 @@ class Browser(QWidget):
                 response = self.show_prompt_dialog(f"The folder {remote_folder} already exists. Do you want to continue uploading?", "Upload Confirmation")
 
                 if response == QMessageBox.No:
-                    # User chose not to continue
                     return
                 elif response == QMessageBox.Yes:
-                    # User chose to continue
                     pass  # Continue with the upload
                 elif response == QMessageBox.YesToAll:
-                    # User chose to always continue
                     self.always = 1
                 else:
-                    # User closed the dialog
                     return
             else:
                 try:
@@ -740,16 +801,25 @@ class Browser(QWidget):
                 selected_item = current_browser.model().data(current_index, Qt.DisplayRole)
                 creds = get_credentials(self.session_id)
                 if self.is_remote_browser():
-                    # Download and view for remote items
                     local_path = os.path.join(os.path.expanduser("~"), "Downloads", selected_item)
                     remote_path = self.get_normalized_remote_path(creds.get('current_remote_directory'), selected_item)
-                    self.upload_download(remote_path)
-                    self.non_blocking_sleep(1000)  # Wait for download to complete
-                    QDesktopServices.openUrl(QUrl.fromLocalFile(local_path))
+                    # Start the download
+                    self.upload_download(remote_path=remote_path, local_path=local_path)
+                    # Use the finished signal to open the file
+                    self.wait_for_download_completion(selected_item) 
                 else:
-                    # View for local items
                     full_path = os.path.join(creds.get('current_local_directory'), selected_item)
                     QDesktopServices.openUrl(QUrl.fromLocalFile(full_path))
+
+    def wait_for_download_completion(self, selected_item):
+        # Wait for the download to finish
+        while not check_response_queue(self.last_download_job_id):
+            self.non_blocking_sleep(100)
+            QApplication.processEvents()
+
+        # Open the downloaded file
+        local_path = os.path.join(os.path.expanduser("~"), "Downloads", selected_item)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(local_path))
 
     def sftp_exists(self, path):
         creds = get_credentials(self.session_id)
@@ -777,4 +847,68 @@ class Browser(QWidget):
         finally:
             delete_response_queue(job_id)
             return exist
-        
+    def is_remote_browser(self):
+        return "Remote" in self.title
+
+    def remove_directory_with_prompt(self):
+        creds = get_credentials(self.session_id)
+        current_browser = self.focusWidget()
+
+        if current_browser is not None and isinstance(current_browser, QTableView):
+            indexes = current_browser.selectedIndexes()
+
+            for index in indexes:
+                if index.isValid():
+                    selected_item_text = current_browser.model().data(index, Qt.DisplayRole)
+
+                    if selected_item_text:
+                        if not self.is_complete_path(selected_item_text):
+                            selected_path = os.path.join(creds.get('current_local_directory'), selected_item_text)
+                        else:
+                            selected_path = self.normalize_path(selected_item_text)
+
+                        if self.is_remote_browser():
+                            # Remove remote directory
+                            if self.is_remote_directory(selected_path):
+                                response = QMessageBox.question(self, "Confirm Remove Directory", f"Are you sure you want to remove the directory: {selected_path}?", QMessageBox.Yes | QMessageBox.No)
+                                if response == QMessageBox.Yes:
+                                    self.remove_directory(selected_path)
+                            else:
+                                response = QMessageBox.question(self, "Confirm Remove File", f"Are you sure you want to remove the file: {selected_path}?", QMessageBox.Yes | QMessageBox.No)
+                                if response == QMessageBox.Yes:
+                                    self.remove_file(selected_path)
+                        else:
+                            # Remove local directory
+                            if os.path.isdir(selected_path):
+                                response = QMessageBox.question(self, "Confirm Remove Directory", f"Are you sure you want to remove the directory: {selected_path}?", QMessageBox.Yes | QMessageBox.No)
+                                if response == QMessageBox.Yes:
+                                    self.remove_directory(selected_path)
+                            else:
+                                response = QMessageBox.question(self, "Confirm Remove File", f"Are you sure you want to remove the file: {selected_path}?", QMessageBox.Yes | QMessageBox.No)
+                                if response == QMessageBox.Yes:
+                                    self.remove_file(selected_path)
+
+    def remove_directory(self, path):
+        try:
+            if self.is_remote_browser():
+                self.sftp_rmdir(path)
+            else:
+                os.rmdir(path)
+        except Exception as e:
+            self.message_signal.emit(f"remove_directory() {e}")
+
+    def remove_file(self, path):
+        try:
+            if self.is_remote_browser():
+                self.sftp_remove(path)
+            else:
+                os.remove(path)
+        except Exception as e:
+            self.message_signal.emit(f"remove_file() {e}")
+
+    def adjust_window_size(self):
+        # Calculate the ideal height based on the number of transfers
+        ideal_height = 200 + (len(self.transfers) * 75)  # 200 for other widgets, 50 per transfer
+        max_height = 600  # Set a maximum height
+        new_height = min(ideal_height, max_height)
+        self.resize(self.width(), new_height)

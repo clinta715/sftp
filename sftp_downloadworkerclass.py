@@ -29,14 +29,16 @@ class SIZE_UNIT(enum.Enum):
     GB = 4
 
 class Transfer:
-    def __init__(self, transfer_id, progress_bar=None, cancel_button=None, download_worker=None, active=False, hbox=None, tbox=None ):
+    def __init__(self, transfer_id, download_worker, active, hbox, progress_bar, cancel_button, tbox, speed_label=None, time_label=None):  # Add parameters
         self.transfer_id = transfer_id
-        self.progress_bar = progress_bar
-        self.cancel_button = cancel_button
         self.download_worker = download_worker
         self.active = active
         self.hbox = hbox
+        self.progress_bar = progress_bar
+        self.cancel_button = cancel_button
         self.tbox = tbox
+        self.speed_label = speed_label  # Add attributes
+        self.time_label = time_label  # Add attributes
 
 class transferSignals(QObject):
     showhide = pyqtSignal()
