@@ -28,12 +28,12 @@ class CustomComboBox(QComboBox):
         self.editingFinished.emit()
 
 # Define SIZE_UNIT and WorkerSignals as necessary
-MAX_TRANSFERS = 4
+MAX_TransferS = 4
 
 class MainWindow(QMainWindow):  # Inherits from QMainWindow
     def __init__(self):
         super().__init__()
-        self.transfers_message = transferSignals()
+        self.Transfers_message = transferSignals()
         # Custom data structure to store hostname, username, and password together
         self.create_initial_data()
         self.host_data = {
@@ -61,7 +61,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         # Initialize buttons
         self.connect_button = QPushButton("Connect")
         self.edit_button = QPushButton("Edit Host Data")
-        self.transfers_button = QPushButton("Show/Hide Transfers")
+        self.Transfers_button = QPushButton("Show/Hide Transfers")
         self.clear_queue_button = QPushButton("Clear Queue")
 
         # Initialize hostname combo box
@@ -117,7 +117,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
     def init_button_layout(self):
         self.button_layout = QHBoxLayout()
         self.button_layout.addWidget(self.connect_button)
-        self.button_layout.addWidget(self.transfers_button)
+        self.button_layout.addWidget(self.Transfers_button)
         self.button_layout.addWidget(self.clear_queue_button)
         self.button_layout.addWidget(self.edit_button)
 
@@ -274,8 +274,8 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         del_credentials(self.session_id)
 
     def on_value_changed(self, value):
-        global MAX_TRANSFERS
-        MAX_TRANSFERS = value
+        global MAX_TransferS
+        MAX_TransferS = value
 
     def update_completer(self):
         # Update the list of hostnames
@@ -331,8 +331,8 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         sftp_queue_clear()
         self.output_console.append("queue cleared")
 
-    def transfers_button_clicked(self):
-        self.transfers_message.showhide.emit()
+    def Transfers_button_clicked(self):
+        self.Transfers_message.showhide.emit()
 
     def update_console(self, message):
         # Update the console with the received message
@@ -428,22 +428,22 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
 def main():
     # ic.disable()
 
-    def hide_transfers_window():
-        if not hasattr(hide_transfers_window, "transfers_hidden"):
-            hide_transfers_window.transfers_hidden = 1  # Initialize it once
+    def hide_Transfers_window():
+        if not hasattr(hide_Transfers_window, "Transfers_hidden"):
+            hide_Transfers_window.Transfers_hidden = 1  # Initialize it once
             background_thread_window.hide()
-        elif hide_transfers_window.transfers_hidden == 0:
+        elif hide_Transfers_window.Transfers_hidden == 0:
             background_thread_window.hide()
-            hide_transfers_window.transfers_hidden = 1
-        elif hide_transfers_window.transfers_hidden == 1:
+            hide_Transfers_window.Transfers_hidden = 1
+        elif hide_Transfers_window.Transfers_hidden == 1:
             background_thread_window.show()
-            hide_transfers_window.transfers_hidden = 0
+            hide_Transfers_window.Transfers_hidden = 0
 
     app = QApplication(sys.argv)
     # app.setStyle('Fusion')
     # qdarktheme.setup_theme()
 
-    # create the window we show the statuses of active transfers in, this is for downloads/uploads but also any background event like fetching a directory listing etc
+    # create the window we show the statuses of active Transfers in, this is for downloads/uploads but also any background event like fetching a directory listing etc
     background_thread_window = BackgroundThreadWindow()
     background_thread_window.setWindowTitle("Transfer Queue")
     background_thread_window.show()
@@ -454,7 +454,7 @@ def main():
     main_window.resize(800, 600)
     main_window.show()
     main_window.backgroundThreadWindow = background_thread_window
-    main_window.transfers_message.showhide.connect(hide_transfers_window)
+    main_window.Transfers_message.showhide.connect(hide_Transfers_window)
 
     sys.exit(app.exec_())
 
