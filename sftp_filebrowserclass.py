@@ -22,8 +22,13 @@ class FileBrowser(Browser):
         # Set horizontal scroll bar policy for the entire table
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
 
-        # Resize the first column based on its contents
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        # Make all columns resizable
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+
+        # Optionally, set initial column widths
+        # self.table.setColumnWidth(0, 100)  # Adjust widths as needed
+        # self.table.setColumnWidth(1, 50)
+
         # ic("file browser init completed")
 
     def remove_directory_with_prompt(self, local_path=None, always=0):

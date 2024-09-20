@@ -67,6 +67,7 @@ class BackgroundThreadWindow(QMainWindow):
         self.check_queue_timer.start(100)  # Check every 1000 ms (1 second)
 
     def remove_queue_item_by_id(self, id_to_remove):
+        ic()
         global queue_display
 
         # Iterate over the queue_display list and remove the item with the matching ID
@@ -76,26 +77,36 @@ class BackgroundThreadWindow(QMainWindow):
         self.populate_queue_list()
 
     def populate_queue_list(self):
+        ic()
         global queue_display
 
         # Clear the list widget first
-        self.list_widget.clear()
+        try:
+            self.list_widget.clear()
+        except:
+            pass
 
         # Iterate over the queue_display and add each filename to the list widget
         for item in queue_display:
-            self.list_widget.addItem(item)
+            try:
+                self.list_widget.addItem(item)
+            except:
+                pass
 
     def queue_display_append(self, item):
+        ic()
         global queue_display
 
         queue_display.append(item)
 
     def scroll_to_bottom(self):
+        ic()
         # Scroll to the bottom of the QTextEdit
         vertical_scroll_bar = self.text_console.verticalScrollBar()
         vertical_scroll_bar.setValue(vertical_scroll_bar.maximum())
 
     def check_and_start_transfers(self):
+        ic()
         # Check if more transfers can be started
         if sftp_queue_isempty() or self.active_transfers == MAX_TRANSFERS:
             return
@@ -105,7 +116,8 @@ class BackgroundThreadWindow(QMainWindow):
         self.populate_queue_list()
 
         if job.command == "end":
-            self._stop_flag = 1
+            # self._stop_flag = 1
+            ic("end command given")
         else:
             hostname = job.hostname
             password = job.password
@@ -116,6 +128,7 @@ class BackgroundThreadWindow(QMainWindow):
             self.start_transfer(job.id, job.source_path, job.destination_path, job.is_source_remote, job.is_destination_remote, hostname, port, username, password, command )
 
     def start_transfer(self, transfer_id, job_source, job_destination, is_source_remote, is_destination_remote, hostname, port, username, password, command):
+        ic()
         # Create a horizontal layout for the progress bar and cancel button
         hbox = QHBoxLayout()
 
@@ -154,6 +167,7 @@ class BackgroundThreadWindow(QMainWindow):
 
     def transfer_finished(self, transfer_id):
         # Find the transfer
+        ic()
         transfer = next((t for t in self.transfers if t.transfer_id == transfer_id), None)
 
         if transfer is None:
@@ -201,10 +215,12 @@ class BackgroundThreadWindow(QMainWindow):
             self.notify_observees()
 
     def update_text_console(self, transfer_id, message):
+        ic()
         if message:
             self.text_console.append(f"{message}")
 
     def update_progress(self, transfer_id, value):
+        ic()
         # Find the transfer with the given transfer_id
         transfer = next((t for t in self.transfers if t.transfer_id == transfer_id), None)
 
