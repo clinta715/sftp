@@ -72,6 +72,13 @@ class SFTPJob:
         data["password"] = base64.b64decode(data["password"]).decode()  # Decode password
         return SFTPJob(**data)
 
+def clear_sftp_queue():
+    while True:
+        try: 
+            sftp_queue.get_nowait()
+        except:
+            break
+
 def add_sftp_job(source_path, is_source_remote, destination_path, is_destination_remote, hostname, username, password, port, command, id ):
     job = SFTPJob(
         source_path, is_source_remote, destination_path, is_destination_remote,
@@ -86,9 +93,6 @@ def sftp_queue_put(job):
 
 def sftp_queue_isempty():
     return sftp_queue.empty()
-
-def sftp_queue_clear():
-    sftp_queue = []
 
 def delete_response_queue(job_id):
     if job_id in response_queues:

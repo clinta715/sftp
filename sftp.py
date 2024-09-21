@@ -18,10 +18,11 @@ from cryptography.fernet import Fernet
 ##logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 ##logging.getLogger("paramiko").setLevel(logging.WARNING)
 
-from sftp_downloadworkerclass import transferSignals, add_sftp_job, sftp_queue_clear
+from sftp_downloadworkerclass import transferSignals, add_sftp_job, clear_sftp_queue
 from PyQt5.QtCore import pyqtSignal
 from sftp_backgroundthreadwindow import BackgroundThreadWindow
 # from sftp_editwindowclass import EditDialogContainer
+from sftp_hostdataeditor import HostDataEditor, save_connection_data, load_connection_data
 from sftp_remotefilebrowserclass import RemoteFileBrowser
 from sftp_filebrowserclass import FileBrowser
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTextEdit
@@ -50,26 +51,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
     def __init__(self):
         super().__init__()
         self.transfers_message = transferSignals()
-        
-        # Set up NSApplicationDelegate
-        if sys.platform == 'darwin':
-            try:
-                from AppKit import NSApplication
-                from Foundation import NSObject, NSURL
-                class AppDelegate(NSObject):
-                    def applicationSupportsSecureRestorableState_(self, app):
-                        return True
-                    
-                    def application_openURLs_(self, app, urls):
-                        # Handle the URLs here
-                        for url in urls:
-                            urlString = url.absoluteString()
-                            print(f"URL opened: {urlString}")
-                            # ... Process the URL ... 
-                delegate = AppDelegate.alloc().init()
-                NSApplication.sharedApplication().setDelegate_(delegate)
-            except ImportError:
-                print("Failed to import Foundation or AppKit. Secure coding for restorable state is not enabled.")
+
         # Custom data structure to store hostname, username, and password together
         self.create_initial_data()
         self.host_data = {
@@ -92,7 +74,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         self.worker_signals.error.connect(self._display_error)
 
         # Load saved connection data and encryption key
-        self.load_connection_data()
+        self.host_data = load_connection_data()
 
         # Initialize UI after loading connection data
         self.init_ui()
@@ -119,7 +101,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
 
         # Initialize buttons
         self.connect_button = QPushButton("Connect")
-        # self.edit_button = QPushButton("Edit Host Data")
+        self.edit_button = QPushButton("Edit Host Data")
         self.transfers_button = QPushButton("Show/Hide Transfers")
         self.clear_queue_button = QPushButton("Clear Queue")
         self.transfers = {}  # Dictionary to store active transfers
@@ -189,13 +171,14 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         self.button_layout.addWidget(self.connect_button)
         self.button_layout.addWidget(self.transfers_button)
         self.button_layout.addWidget(self.clear_queue_button)
-        # self.button_layout.addWidget(self.edit_button)
+        self.button_layout.addWidget(self.edit_button)
 
         # Connect the clicked signal of the edit button to the open_edit_dialog method
-        # self.edit_button.clicked.connect(self.open_edit_dialog)
+        self.edit_button.clicked.connect(self.open_edit_dialog)
 
         # Connect the clicked signal of the connect button to the connect_button_pressed method
         self.connect_button.clicked.connect(self.connect_button_pressed)
+        self.clear_queue_button.clicked.connect(clear_sftp_queue)
 
     def setup_hostname_completer(self):
         # Make sure self.hostnames is initialized and filled with data
@@ -405,21 +388,20 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         self.hostname_completer.setCompletionMode(QCompleter.PopupCompletion)
         self.hostname_combo.setCompleter(self.hostname_completer)
 
-    """ def open_edit_dialog(self):
-        # Initialize the container widget for the tab
-        editDialogContainer = EditDialogContainer(self.host_data)
-        editDialogContainer.editDialog.entryDoubleClicked.connect(self.onEntryDoubleClicked)
-        editDialogContainer.editDialog.dataChanged.connect(self.onHostDataChanged)
+    def open_edit_dialog(self):
+        # Create an instance of HostDataEditor as a QDialog
+        editor = HostDataEditor()  # Pass self if you need to reference the main window
 
-        # Add the container as a new tab
-        self.tab_widget.addTab(editDialogContainer, "Edit Host Data")
+        # Set dialog properties (optional)
+        editor.setWindowTitle("Edit Host Data")
+        editor.setModal(True)  # Make it modal, if desired
 
-        # Set the newly added tab as the current tab
-        self.tab_widget.setCurrentIndex(self.tab_widget.count() - 1) """
+        # Show the dialog
+        editor.exec_()  # Use exec_() for modal dialogs
 
     def onHostDataChanged(self, updated_data):
         self.host_data = updated_data
-        self.save_connection_data()
+        save_connection_data()
         self.update_completer()
 
     def onEntryDoubleClicked(self, entry):
@@ -444,22 +426,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
                 q.task_done()  # Indicate that a formerly enqueued task is complete
         except Exception as e:
             pass  # Queue is empty, break the loop
-
-    def clear_queue_clicked(self):
-        sftp_queue_clear()
-        self.output_console.append("queue cleared")
-
-    def transfers_button_clicked(self):
-        self.transfers_message.showhide.emit()
-
-    def update_console(self, message):
-        # Update both the global and tab-specific consoles with the received message
-        self.global_output_console.append(message)
-        
-        # Update the tab-specific console if it exists
-        current_tab = self.tab_widget.currentWidget()
-        if hasattr(current_tab, 'output_console'):
-            current_tab.output_console.append(message)
 
     def connect_button_pressed(self):
         try:
@@ -561,7 +527,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         self.host_data["usernames"][self.temp_hostname] = self.temp_username
         self.host_data["passwords"][self.temp_hostname] = self.temp_password
         self.host_data["ports"][self.temp_hostname] = str(self.temp_port)
-        self.save_connection_data()
+        save_connection_data(self.host_data)
         self.update_completer()
 
     def create_initial_data(self):
@@ -582,9 +548,9 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         print("Cleanup method called")
         self.cleanup_tasks = [
             self.close_sftp_connections,
-            self.clear_transfer_queue,
+            clear_sftp_queue,
             self.stop_background_thread,
-            self.save_connection_data
+            save_connection_data
         ]
         self.current_task = 0
         self.perform_next_cleanup_task()
@@ -611,14 +577,8 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
             if hasattr(widget, 'right_browser'):
                 widget.right_browser.close_sftp_connection()
 
-    def clear_transfer_queue(self):
-        sftp_queue_clear()
-
     def stop_background_thread(self):
         add_sftp_job(".", False, ".", False, "localhost", "guest", "guest", 69, "end", 69)
-
-    def save_connection_data(self):
-        super().save_connection_data()
 
     def closeEvent(self, event):
         if self.backgroundThreadWindow.active_transfers > 0:
@@ -632,49 +592,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
                 return
         QTimer.singleShot(0, self.cleanup)  # Start cleanup on next event loop iteration
         event.accept()
-
-    def save_connection_data(self):
-        data = {
-            "hostnames": self.host_data["hostnames"],
-            "usernames": self.host_data["usernames"],
-            "passwords": {k: self.cipher_suite.encrypt(v.encode()).decode() for k, v in self.host_data["passwords"].items()},
-            "ports": self.host_data["ports"],
-            "encryption_key": self.encryption_key.decode()  # Save the encryption key
-        }
-        with open('connection_data.json', 'w') as f:
-            json.dump(data, f)
-
-    def load_connection_data(self):
-        try:
-            with open('connection_data.json', 'r') as f:
-                data = json.load(f)
-            
-            # Load the encryption key first
-            self.encryption_key = data.get("encryption_key", Fernet.generate_key()).encode()
-            self.cipher_suite = Fernet(self.encryption_key)
-
-            self.host_data["hostnames"] = data.get("hostnames", {})
-            self.host_data["usernames"] = data.get("usernames", {})
-            self.host_data["passwords"] = {k: self.cipher_suite.decrypt(v.encode()).decode() for k, v in data.get("passwords", {}).items()}
-            self.host_data["ports"] = data.get("ports", {})
-            self.hostnames = list(self.host_data["hostnames"].keys())
-            
-            # Only update the completer if hostname_combo exists
-            if hasattr(self, 'hostname_combo'):
-                self.update_completer()
-        except FileNotFoundError:
-            # If the file doesn't exist, generate a new encryption key and create an empty structure
-            self.encryption_key = Fernet.generate_key()
-            self.cipher_suite = Fernet(self.encryption_key)
-            self.host_data = {"hostnames": {}, "usernames": {}, "passwords": {}, "ports": {}}
-            self.hostnames = []
-        except Exception as e:
-            print(f"Error loading connection data: {str(e)}")
-            # If there's any error, generate a new encryption key and create an empty structure
-            self.encryption_key = Fernet.generate_key()
-            self.cipher_suite = Fernet(self.encryption_key)
-            self.host_data = {"hostnames": {}, "usernames": {}, "passwords": {}, "ports": {}}
-            self.hostnames = []
 
 def main():
     # Parse command line arguments
@@ -738,20 +655,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    def prepare_container_widget(self):
-        container_widget = QWidget()
-        layout = QHBoxLayout()
-
-        self.left_browser = FileBrowser("Local Files", self.session_id)
-        self.right_browser = RemoteFileBrowser("Remote Files", self.session_id)
-
-        layout.addWidget(self.left_browser)
-        layout.addWidget(self.right_browser)
-
-        self.left_browser.add_observer(self.right_browser)
-        self.right_browser.add_observer(self.left_browser)
-        self.backgroundThreadWindow.add_observee(self.right_browser)
-        self.backgroundThreadWindow.add_observee(self.left_browser)
-
-        container_widget.setLayout(layout)
-        return container_widget

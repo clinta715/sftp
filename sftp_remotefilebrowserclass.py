@@ -20,9 +20,10 @@ class RemoteFileBrowser(FileBrowser):
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
 
         # Resize the first column based on its contents
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        # self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         ic()
-
+        # Make all columns resizable
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         set_credentials(self.session_id, 'current_remote_directory', self.sftp_getcwd())
 
     def is_remote_browser(self):
