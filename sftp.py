@@ -12,7 +12,7 @@ from icecream import ic
 ic.configureOutput(prefix='DEBUG | ')
 ic.disable()
 from PyQt5.QtWidgets import QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QTextEdit, QCompleter, QComboBox, QSpinBox, QTabWidget, QMessageBox
-from PyQt5.QtCore import pyqtSignal, QObject, QCoreApplication, Qt, QTimer
+from PyQt5.QtCore import pyqtSignal, QObject, QCoreApplication, Qt, QTimer, QEvent
 from cryptography.fernet import Fernet
 
 # Configure logging
@@ -26,8 +26,11 @@ from sftp_backgroundthreadwindow import BackgroundThreadWindow
 from sftp_hostdataeditor import HostDataEditor, save_connection_data, load_connection_data
 from sftp_remotefilebrowserclass import RemoteFileBrowser
 from sftp_filebrowserclass import FileBrowser
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTextEdit
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QMenu
 from sftp_creds import get_credentials, set_credentials, del_credentials, create_random_integer
+import os
+import subprocess
+import platform
 
 MAX_HOST_DATA_SIZE = 10  # Set your desired maximum size
 
@@ -79,6 +82,14 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
 
         # Initialize UI after loading connection data
         self.init_ui()
+
+        # Create the background thread window
+        self.backgroundThreadWindow = BackgroundThreadWindow()
+        self.backgroundThreadWindow.setWindowTitle("Transfer Queue")
+        self.backgroundThreadWindow.show()
+
+        # Install event filter for window movement
+        self.installEventFilter(self)
 
     def _display_error(self, transfer_id, message):
         # Display error in a message box
@@ -627,6 +638,21 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         event.accept()
         self.cleanup()  # Run cleanup after accepting the event
 
+    def position_background_window(self):
+        main_geo = self.geometry()
+        background_geo = self.backgroundThreadWindow.geometry()
+        
+        # Position the background window to the right of the main window
+        new_x = main_geo.x() + main_geo.width() + 10  # 10 pixels gap
+        new_y = main_geo.y()
+        
+        self.backgroundThreadWindow.setGeometry(new_x, new_y, background_geo.width(), background_geo.height())
+
+    def eventFilter(self, source, event):
+        if source == self and event.type() == QEvent.Move:
+            self.position_background_window()
+        return super().eventFilter(source, event)
+
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="FTP/SFTP Client")
@@ -645,30 +671,28 @@ def main():
     def hide_transfers_window():
         if not hasattr(hide_transfers_window, "transfers_hidden"):
             hide_transfers_window.transfers_hidden = 1  # Initialize it once
-            background_thread_window.hide()
+            main_window.backgroundThreadWindow.hide()
         elif hide_transfers_window.transfers_hidden == 0:
-            background_thread_window.hide()
+            main_window.backgroundThreadWindow.hide()
             hide_transfers_window.transfers_hidden = 1
         elif hide_transfers_window.transfers_hidden == 1:
-            background_thread_window.show()
+            main_window.backgroundThreadWindow.show()
+            main_window.position_background_window()  # Reposition when showing
             hide_transfers_window.transfers_hidden = 0
 
     app = QApplication(sys.argv)
     # app.setStyle('Fusion')
     # qdarktheme.setup_theme()
 
-    # create the window we show the statuses of active transfers in, this is for downloads/uploads but also any background event like fetching a directory listing etc
-    background_thread_window = BackgroundThreadWindow()
-    background_thread_window.setWindowTitle("Transfer Queue")
-    background_thread_window.show()
-
     # create the main window of the application
     main_window = MainWindow()
     main_window.setWindowTitle("FTP/SFTP Client")
     main_window.resize(800, 600)
     main_window.show()
-    main_window.backgroundThreadWindow = background_thread_window
     main_window.transfers_message.showhide.connect(hide_transfers_window)
+
+    # Position the background window
+    main_window.position_background_window()
 
     # If command line arguments are provided, initiate the connection
     if args.hostname:
