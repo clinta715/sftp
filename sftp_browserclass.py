@@ -588,6 +588,7 @@ class Browser(QWidget):
         if index.isValid():
             # Retrieve the data from the model
             path = self.model.data(index, Qt.DisplayRole)
+            path = path.split(' ', 1)[-1]  # Remove the icon prefix
             # Now you can use 'text' as needed
 
         try:
@@ -628,6 +629,9 @@ class Browser(QWidget):
             upload_download_action = menu.addAction("Upload/Download")
             prompt_and_create_directory = menu.addAction("Create Directory")
             view_edit_action = menu.addAction("View/Edit")
+            
+            # Add the new Refresh action
+            refresh_action = menu.addAction("Refresh")
 
             # Connect the actions to corresponding methods
             remove_dir_action.triggered.connect(self.remove_directory_with_prompt)
@@ -635,6 +639,9 @@ class Browser(QWidget):
             upload_download_action.triggered.connect(self.upload_download)
             prompt_and_create_directory.triggered.connect(self.prompt_and_create_directory)
             view_edit_action.triggered.connect(self.view_edit_file)
+            
+            # Connect the new Refresh action
+            refresh_action.triggered.connect(self.refresh_files)
 
             # Show the menu at the cursor position
             menu.exec_(current_browser.mapToGlobal(point))
@@ -656,8 +663,12 @@ class Browser(QWidget):
                 if isinstance(index, QModelIndex):
                     if index.isValid():
                         selected_item_text = current_browser.model().data(index, Qt.DisplayRole)
+                        # Remove the decorative icon prefix
+                        selected_item_text = selected_item_text.split(' ', 1)[-1]
                 elif isinstance(index, str):
                     selected_item_text = index
+                    # Remove the decorative icon prefix
+                    selected_item_text = selected_item_text.split(' ', 1)[-1]
 
                 if selected_item_text:
                     # Construct the full path of the selected item
@@ -835,3 +846,8 @@ class Browser(QWidget):
             delete_response_queue(job_id)
             return exist
         
+    def refresh_files(self):
+        if hasattr(self.model, 'invalidate_cache'):
+            self.model.invalidate_cache()
+        self.get_files()
+        self.notify_observers()

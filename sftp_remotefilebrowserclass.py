@@ -12,6 +12,31 @@ from sftp_downloadworkerclass import create_response_queue, delete_response_queu
 # from sftp_backgroundthreadwindow import queue_display_append
 
 class RemoteFileBrowser(FileBrowser):
+    def prompt_overwrite(self, item_path):
+        msg_box = QMessageBox()
+        msg_box.setIcon(QMessageBox.Question)
+        msg_box.setText(f"The item '{item_path}' already exists.")
+        msg_box.setInformativeText("What would you like to do?")
+        msg_box.setWindowTitle("Overwrite Confirmation")
+
+        cancel_btn = msg_box.addButton("Cancel All", QMessageBox.RejectRole)
+        skip_btn = msg_box.addButton("Skip", QMessageBox.NoRole)
+        skip_all_btn = msg_box.addButton("Skip All", QMessageBox.NoRole)
+        overwrite_btn = msg_box.addButton("Overwrite", QMessageBox.YesRole)
+        overwrite_all_btn = msg_box.addButton("Overwrite All", QMessageBox.YesRole)
+
+        msg_box.exec_()
+
+        if msg_box.clickedButton() == cancel_btn:
+            return "cancel"
+        elif msg_box.clickedButton() == skip_btn:
+            return "skip"
+        elif msg_box.clickedButton() == skip_all_btn:
+            return "skip_all"
+        elif msg_box.clickedButton() == overwrite_btn:
+            return "overwrite"
+        elif msg_box.clickedButton() == overwrite_all_btn:
+            return "overwrite_all"
     def __init__(self, title, session_id, parent=None):
         super().__init__(title, session_id, parent)  # Initialize the FileBrowser parent class
         self.model = RemoteFileTableModel(self.session_id)
@@ -23,6 +48,10 @@ class RemoteFileBrowser(FileBrowser):
         # Make all columns resizable
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         set_credentials(self.session_id, 'current_remote_directory', self.sftp_getcwd())
+
+        # Add these lines to enable full row selection
+        self.table.setSelectionBehavior(QTableView.SelectRows)
+        self.table.setSelectionMode(QTableView.SingleSelection)
 
         # Initialize the model immediately
         self.initialize_model()
@@ -51,7 +80,8 @@ class RemoteFileBrowser(FileBrowser):
                 # Attempt to create the directory locally
                 self.sftp_mkdir(directory_name)
                 self.message_signal.emit(f"'{directory_name}' created successfully.")
-                self.model.get_files()
+                self.model.invalidate_cache()
+                self.model.get_files(force_refresh=True)
                 self.notify_observers()
             except Exception as e:
                 self.message_signal.emit(f"Error creating directory: {e}")
@@ -123,7 +153,8 @@ class RemoteFileBrowser(FileBrowser):
 
             set_credentials(self.session_id, 'current_remote_directory', new_path)
             self.message_signal.emit(f"{new_path}")
-            self.model.get_files(force_refresh=force_refresh)
+            self.model.invalidate_cache()
+            self.model.get_files(force_refresh=True)
             self.notify_observers()
             self.table.viewport().update()
             return True
@@ -141,8 +172,10 @@ class RemoteFileBrowser(FileBrowser):
             if not index.isValid():
                 return False
 
-            # Retrieve the file path from the model
-            temp_path = self.model.data(index, Qt.DisplayRole)
+            # Always get the data from the first column (filename)
+            filename_index = self.model.index(index.row(), 0)
+            temp_path = self.model.data(filename_index, Qt.DisplayRole)
+            temp_path = temp_path.split(' ', 1)[-1]  # Remove the icon prefix
             
             # Early return for parent directory navigation
             if temp_path == "..":
@@ -259,7 +292,8 @@ class RemoteFileBrowser(FileBrowser):
             self.message_signal.emit(f"remove_directory_with_prompt() {e}")
 
         finally:
-            self.get_files()
+            self.model.invalidate_cache()
+            self.model.get_files(force_refresh=True)
 
     def upload_download(self, optionalpath=None):
         creds = get_credentials(self.session_id)
@@ -277,14 +311,14 @@ class RemoteFileBrowser(FileBrowser):
             indexes = current_browser.selectedIndexes()
             has_valid_item = False  # Track if we found any valid items
             
-            for index in indexes:
-                selected_item_text = ""
+            skip_all = False
+            overwrite_all = False
 
-                if isinstance(index, QModelIndex):
-                    if index.isValid():
-                        selected_item_text = current_browser.model().data(index, Qt.DisplayRole)
-                elif isinstance(index, str):
-                    selected_item_text = index
+            for index in indexes:
+                # Always get the data from the first column (filename)
+                filename_index = self.model.index(index.row(), 0)
+                selected_item_text = self.model.data(filename_index, Qt.DisplayRole)
+                selected_item_text = selected_item_text.split(' ', 1)[-1]  # Remove the icon prefix
 
                 if optionalpath:
                     selected_item_text = optionalpath
@@ -292,13 +326,12 @@ class RemoteFileBrowser(FileBrowser):
                 if selected_item_text:
                     try:
                         if optionalpath == None:
-                            # ic(selected_item_text)
                             remote_entry_path = self.get_normalized_remote_path(current_remote_directory, selected_item_text)
                         else:
                             remote_entry_path = self.get_normalized_remote_path(selected_item_text)
 
                         local_base_path = creds.get('current_local_directory')
-                        local_entry_path = os.path.join( local_base_path, selected_item_text)
+                        local_entry_path = os.path.join(local_base_path, selected_item_text)
 
                         ic(selected_item_text)
                         ic(remote_entry_path)
@@ -307,19 +340,42 @@ class RemoteFileBrowser(FileBrowser):
 
                         if self.is_remote_directory(remote_entry_path):
                             ic(remote_entry_path)
-                            # if its a remote directory, we establish its path selected_item+remote path
-                            # then we download it to current local directory + selected_item_text (?)
-                            ic(local_entry_path)
-                            self.download_directory(remote_entry_path, local_entry_path)
+                            if not skip_all and not overwrite_all and os.path.exists(local_entry_path):
+                                action = self.prompt_overwrite(local_entry_path)
+                                if action == "cancel":
+                                    return
+                                elif action == "skip":
+                                    continue
+                                elif action == "skip_all":
+                                    skip_all = True
+                                    continue
+                                elif action == "overwrite_all":
+                                    overwrite_all = True
+
+                            if not skip_all:
+                                self.download_directory(remote_entry_path, local_entry_path, skip_all, overwrite_all)
                         else:
-                            job_id = create_random_integer()
-                            queue_item = QueueItem(remote_entry_path, job_id)
-                            ic(remote_entry_path, local_entry_path)
-                            ic(job_id)
-                            add_sftp_job(remote_entry_path, True, local_entry_path, False, 
-                                        self.init_hostname, self.init_username, 
-                                        self.init_password, self.init_port, 
-                                        "download", job_id)
+                            if not skip_all and not overwrite_all and os.path.exists(local_entry_path):
+                                action = self.prompt_overwrite(local_entry_path)
+                                if action == "cancel":
+                                    return
+                                elif action == "skip":
+                                    continue
+                                elif action == "skip_all":
+                                    skip_all = True
+                                    continue
+                                elif action == "overwrite_all":
+                                    overwrite_all = True
+
+                            if not skip_all:
+                                job_id = create_random_integer()
+                                queue_item = QueueItem(remote_entry_path, job_id)
+                                ic(remote_entry_path, local_entry_path)
+                                ic(job_id)
+                                add_sftp_job(remote_entry_path, True, local_entry_path, False, 
+                                            self.init_hostname, self.init_username, 
+                                            self.init_password, self.init_port, 
+                                            "download", job_id)
                         has_valid_item = True  # Mark as valid item found
                     except Exception as e:
                         error_message = f"upload_download() encountered an error: {str(e)}"
@@ -332,43 +388,23 @@ class RemoteFileBrowser(FileBrowser):
                 self.message_signal.emit("No valid items selected.")
         else:
             self.message_signal.emit("Current browser is not a valid QTableView.")
+        
+        # Force refresh after upload/download operations
+        self.model.invalidate_cache()
+        self.model.get_files(force_refresh=True)
 
-    def download_directory(self, source_directory, destination_directory, always=0):
+    def download_directory(self, source_directory, destination_directory, skip_all=False, overwrite_all=False):
         ic()
-        self.always = always
 
         try:
             # Create a local folder with the same name as the remote folder
             ic(source_directory, destination_directory)
-            # local_folder = os.path.join(destination_directory, os.path.basename(source_directory))
             local_folder = destination_directory
             ic(local_folder)
 
-            if os.path.exists(local_folder):
-                # Check if 'always' option was selected before
-                
-                # If not, show the dialog with 'always' option
-                ic(self.always)
-                if not self.always:
-                    response = QMessageBox.question(
-                        self,
-                        'Folder Exists',
-                        f"The folder '{local_folder}' already exists. Do you want to proceed?",
-                        QMessageBox.Yes | QMessageBox.No | QMessageBox.YesToAll,
-                        QMessageBox.No
-                    )
-
-                    if response == QMessageBox.YesToAll:
-                        self.always = 1
-
-                    elif response == QMessageBox.No:
-                        self.always = 0
-                        return
-            else:
+            if not os.path.exists(local_folder):
                 self.message_signal.emit(f"mkdir {local_folder}")
                 os.makedirs(local_folder, exist_ok=True)
-                # creating a local directory, let local browser know to update its contents
-                # self.notify_observers()
 
             # List the contents of the remote directory
             directory_contents = self.sftp_listdir(source_directory)
@@ -376,52 +412,48 @@ class RemoteFileBrowser(FileBrowser):
 
             # Download files and recurse into subdirectories
             for entry in directory_contents:
-                # entry_path = os.path.join(source_directory, entry)
-                entry_path = self.get_normalized_remote_path( source_directory, entry)
+                entry_path = self.get_normalized_remote_path(source_directory, entry)
                 ic(entry_path)
                 local_entry_path = os.path.join(local_folder, entry)
 
-                # If it's a directory, recursively download its contents
-                # ic()
                 ic(local_entry_path)
                 if self.is_remote_directory(entry_path):
-                    self.message_signal.emit(f"download_directory() {entry_path}, {local_folder}")
-                    self.download_directory(entry_path, local_folder, self.always)
-                    # local directory view needs to be updated with downloaded folder
-                    # self.notify_observers()
+                    if not skip_all and not overwrite_all and os.path.exists(local_entry_path):
+                        action = self.prompt_overwrite(local_entry_path)
+                        if action == "cancel":
+                            return
+                        elif action == "skip":
+                            continue
+                        elif action == "skip_all":
+                            skip_all = True
+                            continue
+                        elif action == "overwrite_all":
+                            overwrite_all = True
+
+                    if not skip_all:
+                        self.message_signal.emit(f"download_directory() {entry_path}, {local_folder}")
+                        self.download_directory(entry_path, local_entry_path, skip_all, overwrite_all)
                 else:
                     # If it's a file, download it
                     self.message_signal.emit(f"download_directory() {entry_path}, {local_entry_path}")
 
-                    if os.path.exists(local_entry_path):
-                        # changed indent here after noting the 'pass' statement above... 
-                        if not self.always:
-                            response = QMessageBox.question(
-                            self,
-                            'Folder Exists',
-                            f"The folder '{local_folder}' already exists. Do you want to proceed?",
-                            QMessageBox.Yes | QMessageBox.No | QMessageBox.YesToAll,
-                            QMessageBox.No
-                            )
-    
-                            if response == QMessageBox.YesToAll:
-                                self.always = 1
-                            elif response == QMessageBox.No:
-                                return
-                   
-                    try:
-                        os.remove(local_entry_path)
-                        # local directory view needs to be updated with removed folder
-                    except Exception as e:
-                        pass
+                    if not skip_all and not overwrite_all and os.path.exists(local_entry_path):
+                        action = self.prompt_overwrite(local_entry_path)
+                        if action == "cancel":
+                            return
+                        elif action == "skip":
+                            continue
+                        elif action == "skip_all":
+                            skip_all = True
+                            continue
+                        elif action == "overwrite_all":
+                            overwrite_all = True
 
-                    # self.message_signal.emit(f"download_directory() {entry_path}, {local_entry_path}")
-                    job_id = create_random_integer()
-
-                    queue_item = QueueItem( os.path.basename(entry_path), job_id )
-                    # ic()
-                    ic(job_id)
-                    add_sftp_job(entry_path, True, local_entry_path, False, self.init_hostname, self.init_username, self.init_password, self.init_port, "download", job_id)
+                    if not skip_all:
+                        job_id = create_random_integer()
+                        queue_item = QueueItem(os.path.basename(entry_path), job_id)
+                        ic(job_id)
+                        add_sftp_job(entry_path, True, local_entry_path, False, self.init_hostname, self.init_username, self.init_password, self.init_port, "download", job_id)
 
         except Exception as e:
             self.message_signal.emit(f"download_directory() {e}")

@@ -29,6 +29,14 @@ class RemoteFileTableModel(QAbstractTableModel):
         # Return the number of columns
         return len(self.column_names)
 
+    def invalidate_cache(self, directory=None):
+        if directory:
+            self.cache.pop(directory, None)
+            self.cache_time.pop(directory, None)
+        else:
+            self.cache.clear()
+            self.cache_time.clear()
+
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid() or not (0 <= index.row() < len(self.file_list)):
             return QVariant()

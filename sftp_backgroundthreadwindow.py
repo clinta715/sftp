@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QListWidget, QTextEdit, QProgressBar, QSizePolicy
+from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QListWidget, QTextEdit, QProgressBar, QSizePolicy, QLabel
 from PyQt5.QtCore import QThreadPool, QTimer
 from icecream import ic
 import os
@@ -15,6 +15,7 @@ class BackgroundThreadWindow(QMainWindow):
         self.active_transfers = 0
         self.transfers = []
         self.observees = []
+        self.total_queue_items = 0  # New attribute to track total queue items
         self.init_ui()
 
     def add_observee(self,observee):
@@ -47,6 +48,16 @@ class BackgroundThreadWindow(QMainWindow):
 
         self.layout = QVBoxLayout()
 
+        # Add overall queue progress bar
+        self.overall_progress_layout = QHBoxLayout()
+        self.overall_progress_label = QLabel("Overall Queue Progress:")
+        self.overall_progress_bar = QProgressBar()
+        self.overall_progress_bar.setRange(0, 100)
+        self.overall_progress_bar.setValue(0)
+        self.overall_progress_layout.addWidget(self.overall_progress_label)
+        self.overall_progress_layout.addWidget(self.overall_progress_bar)
+        self.layout.addLayout(self.overall_progress_layout)
+
         self.list_widget = QListWidget()
         self.layout.addWidget(self.list_widget)
 
@@ -72,9 +83,18 @@ class BackgroundThreadWindow(QMainWindow):
 
         # Iterate over the queue_display list and remove the item with the matching ID
         queue_display = [item for item in queue_display if item != id_to_remove]
+        self.total_queue_items -= 1
+        self.update_overall_progress()
 
         # Optionally, update the list widget after removal
         self.populate_queue_list()
+
+    def update_overall_progress(self):
+        if self.total_queue_items > 0:
+            progress = int((self.active_transfers / self.total_queue_items) * 100)
+        else:
+            progress = 0
+        self.overall_progress_bar.setValue(progress)
 
     def populate_queue_list(self):
         ic()
@@ -98,6 +118,8 @@ class BackgroundThreadWindow(QMainWindow):
         global queue_display
 
         queue_display.append(item)
+        self.total_queue_items += 1
+        self.update_overall_progress()
 
     def scroll_to_bottom(self):
         ic()
@@ -180,6 +202,7 @@ class BackgroundThreadWindow(QMainWindow):
         self.queue_display_append(new_transfer.download_worker.job_source)
         self.populate_queue_list()
         self.active_transfers += 1
+        self.update_overall_progress()
 
     def transfer_finished(self, transfer_id):
         # Find the transfer
@@ -227,6 +250,7 @@ class BackgroundThreadWindow(QMainWindow):
         self.remove_queue_item_by_id(transfer.download_worker.job_source)
         self.populate_queue_list()
         self.active_transfers -= 1
+        self.update_overall_progress()
         if transfer.download_worker.command == "upload" or transfer.download_worker.command == "download":
             self.notify_observees()
 

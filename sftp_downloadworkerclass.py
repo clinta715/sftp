@@ -5,6 +5,15 @@ from icecream import ic
 import paramiko
 import queue
 import base64
+import re
+import os
+
+def strip_decorative_chars(filename):
+    """Strip decorative characters from the filename."""
+    # Remove leading emoji characters and spaces
+    filename = re.sub(r'^[\U0001F000-\U0001F9FF\s]+', '', filename)
+    # Remove any remaining leading or trailing whitespace
+    return filename.strip()
 
 class WorkerSignals(QObject):
     progress = pyqtSignal(int, int)
@@ -161,11 +170,15 @@ class DownloadWorker(QRunnable):
             self.signals.message.emit(self.transfer_id,f"download_thread() {e}")
             return
 
+        # Strip decorative characters from source and destination paths
+        clean_source = strip_decorative_chars(self.job_source)
+        clean_destination = strip_decorative_chars(self.job_destination)
+
         if self.is_source_remote and not self.is_destination_remote:
             # Download from remote to local
-            self.signals.message.emit(self.transfer_id,f"download_thread() {self.job_source},{self.job_destination}")
+            self.signals.message.emit(self.transfer_id,f"download_thread() {clean_source},{clean_destination}")
             try:
-                self.sftp.get(self.job_source, self.job_destination, callback=self.progress)
+                self.sftp.get(clean_source, clean_destination, callback=self.progress)
             except:
                 self.signals.message.emit(self.transfer_id,f"Transfer {self.transfer_id} was interrupted.")
 
@@ -173,9 +186,9 @@ class DownloadWorker(QRunnable):
 
         elif self.is_destination_remote and not self.is_source_remote :
             # Upload from local to remote
-            self.signals.message.emit(self.transfer_id,f"download_thread() {self.job_source},{self.job_destination}")
+            self.signals.message.emit(self.transfer_id,f"download_thread() {clean_source},{clean_destination}")
             try:
-                self.sftp.put(self.job_source, self.job_destination, callback=self.progress)
+                self.sftp.put(clean_source, clean_destination, callback=self.progress)
             except:
                 self.signals.message.emit(self.transfer_id,f"Transfer {self.transfer_id} was interrupted.")
 

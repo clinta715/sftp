@@ -1,6 +1,6 @@
 from sftp_browserclass import Browser
 from sftp_filetablemodel import FileTableModel
-from PyQt5.QtWidgets import QMessageBox, QHeaderView
+from PyQt5.QtWidgets import QMessageBox, QHeaderView, QTableView
 from PyQt5.QtCore import Qt
 import os 
 import shutil
@@ -24,6 +24,10 @@ class FileBrowser(Browser):
 
         # Make all columns resizable
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+
+        # Add these lines to enable full row selection
+        self.table.setSelectionBehavior(QTableView.SelectRows)
+        self.table.setSelectionMode(QTableView.SingleSelection)
 
         # Optionally, set initial column widths
         # self.table.setColumnWidth(0, 100)  # Adjust widths as needed
