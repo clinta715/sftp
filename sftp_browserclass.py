@@ -4,6 +4,10 @@ from PyQt5 import QtCore
 from stat import S_ISDIR
 import stat
 import os
+import sys
+import tempfile
+import subprocess
+import time
 from icecream import ic
 from pathlib import Path
 
@@ -462,27 +466,36 @@ class Browser(QWidget):
             delete_response_queue(job_id)
             return is_file
 
-    def waitjob(self, job_id):
+    def waitjob(self, job_id, timeout=30):  # 30 seconds timeout
         # Initialize the progress bar
         self.progressBar.setRange(0, 100)
         self.progressBar.setValue(0)
 
         progress_value = 0
-        while not check_response_queue(job_id):
-            # Increment progress by 10%, up to 100%
-            progress_value = min(progress_value + 10, 100)
-            self.progressBar.setValue(progress_value)
+        start_time = time.time()
+        try:
+            while not check_response_queue(job_id):
+                if time.time() - start_time > timeout:
+                    raise TimeoutError("Job timed out")
+                
+                # Increment progress by 10%, up to 100%
+                progress_value = min(progress_value + 10, 100)
+                self.progressBar.setValue(progress_value)
 
-            # Sleep and process events to keep UI responsive
-            self.non_blocking_sleep(100)
-            QApplication.processEvents()  # Process any pending GUI events
+                # Sleep and process events to keep UI responsive
+                self.non_blocking_sleep(100)
+                QApplication.processEvents()  # Process any pending GUI events
 
-        # Reset the progress bar after completion
-        self.progressBar.setValue(100)
-        self.progressBar.setRange(0, 100)
+        except (TimeoutError, KeyboardInterrupt) as e:
+            self.message_signal.emit(f"Job interrupted: {str(e)}")
+            return False
+        finally:
+            # Reset the progress bar after completion or interruption
+            self.progressBar.setValue(100)
+            self.progressBar.setRange(0, 100)
 
-        # Return after the job is done
-        return
+        # Return True if the job completed successfully
+        return True
 
     def focusInEvent(self, event):
         self.setStyleSheet("""
@@ -611,15 +624,17 @@ class Browser(QWidget):
             menu = QMenu(self)
             # Add actions to the menu
             remove_dir_action = menu.addAction("Remove Directory")
-            change_dir_action = menu.addAction("Change Directory")  # New action
+            change_dir_action = menu.addAction("Change Directory")
             upload_download_action = menu.addAction("Upload/Download")
             prompt_and_create_directory = menu.addAction("Create Directory")
+            view_edit_action = menu.addAction("View/Edit")
 
             # Connect the actions to corresponding methods
             remove_dir_action.triggered.connect(self.remove_directory_with_prompt)
-            change_dir_action.triggered.connect(self.change_directory_handler)  # Connect to the new method
+            change_dir_action.triggered.connect(self.change_directory_handler)
             upload_download_action.triggered.connect(self.upload_download)
             prompt_and_create_directory.triggered.connect(self.prompt_and_create_directory)
+            view_edit_action.triggered.connect(self.view_edit_file)
 
             # Show the menu at the cursor position
             menu.exec_(current_browser.mapToGlobal(point))
@@ -743,6 +758,55 @@ class Browser(QWidget):
         dialog.setDefaultButton(QMessageBox.Yes)
 
         return dialog.exec_()
+
+    def view_edit_file(self):
+        creds = get_credentials(self.session_id)
+        current_browser = self.focusWidget()
+
+        if current_browser is not None and isinstance(current_browser, QTableView):
+            indexes = current_browser.selectedIndexes()
+            if indexes:
+                index = indexes[0]  # Get the first selected item
+                selected_item_text = current_browser.model().data(index, Qt.DisplayRole)
+                
+                if self.is_remote_file(selected_item_text):
+                    remote_path = self.get_normalized_remote_path(creds.get('current_remote_directory'), selected_item_text)
+                    
+                    # Create a temporary file
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(selected_item_text)[1]) as temp_file:
+                        temp_path = temp_file.name
+                    
+                    # Download the file to the temporary location
+                    job_id = create_random_integer()
+                    queue = create_response_queue(job_id)
+                    add_sftp_job(remote_path, True, temp_path, False, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "download", job_id)
+                    
+                    # Wait for the download to complete
+                    if not self.waitjob(job_id):
+                        self.message_signal.emit("File download was interrupted or timed out.")
+                        return
+                    
+                    # Open the file with the default application
+                    try:
+                        if sys.platform.startswith('darwin'):  # macOS
+                            subprocess.Popen(['open', temp_path])
+                        elif sys.platform.startswith('win'):  # Windows
+                            os.startfile(temp_path)
+                        else:  # Linux and other Unix-like
+                            subprocess.Popen(['xdg-open', temp_path])
+                        self.message_signal.emit(f"Opened file: {selected_item_text}")
+                    except Exception as e:
+                        self.message_signal.emit(f"Error opening file: {str(e)}")
+                    
+                    # TODO: Implement a mechanism to upload the file back if it was modified
+                    # This could involve monitoring the file for changes and prompting the user to upload
+                    
+                else:
+                    self.message_signal.emit("Selected item is not a remote file.")
+            else:
+                self.message_signal.emit("No item selected.")
+        else:
+            self.message_signal.emit("Current browser is not a valid QTableView.")
 
     def sftp_exists(self, path):
         creds = get_credentials(self.session_id)

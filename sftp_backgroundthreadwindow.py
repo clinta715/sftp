@@ -129,14 +129,27 @@ class BackgroundThreadWindow(QMainWindow):
 
     def start_transfer(self, transfer_id, job_source, job_destination, is_source_remote, is_destination_remote, hostname, port, username, password, command):
         ic()
-        # Create a horizontal layout for the progress bar and cancel button
-        hbox = QHBoxLayout()
+        # Create a vertical layout for the text and progress bar/cancel button
+        vbox = QVBoxLayout()
 
         # Create the textbox
         textbox = QLineEdit()
-        textbox.setReadOnly(True)  # Make it read-only if needed
-        textbox.setText(os.path.basename(job_source))  # Set text if needed
-        hbox.addWidget(textbox, 2)  # Add it to the layout with a stretch factor
+        textbox.setReadOnly(True)
+        
+        # Set text with ellipsis if it's too long
+        full_text = os.path.basename(job_source)
+        max_length = 30  # Adjust this value as needed
+        if len(full_text) > max_length:
+            abbreviated_text = full_text[:max_length-3] + '...'
+            textbox.setText(abbreviated_text)
+            textbox.setToolTip(full_text)  # Show full text on hover
+        else:
+            textbox.setText(full_text)
+        
+        vbox.addWidget(textbox)
+
+        # Create a horizontal layout for the progress bar and cancel button
+        hbox = QHBoxLayout()
 
         # Create the progress bar
         progress_bar = QProgressBar()
@@ -147,8 +160,11 @@ class BackgroundThreadWindow(QMainWindow):
         cancel_button.clicked.connect(lambda: self.transfer_finished(transfer_id))
         hbox.addWidget(cancel_button, 1)  # Add it to the layout with a stretch factor of 1
 
-        # Add the horizontal layout to the main layout
-        self.layout.addLayout(hbox)
+        # Add the horizontal layout to the vertical layout
+        vbox.addLayout(hbox)
+
+        # Add the vertical layout to the main layout
+        self.layout.addLayout(vbox)
 
         # Store references to the widgets for later use
         new_transfer = Transfer(transfer_id=transfer_id, download_worker=DownloadWorker(transfer_id, job_source, job_destination, is_source_remote, is_destination_remote, hostname, port, username, password, command), active=True, hbox=hbox, progress_bar=progress_bar, cancel_button=cancel_button, tbox=textbox)
@@ -157,8 +173,8 @@ class BackgroundThreadWindow(QMainWindow):
         new_transfer.download_worker.signals.progress.connect(lambda tid, val: self.update_progress(tid, val))
         new_transfer.download_worker.signals.finished.connect(lambda tid: self.transfer_finished(tid))
         new_transfer.download_worker.signals.message.connect(lambda tid, msg: self.update_text_console(tid, msg))
-
         self.transfers.append(new_transfer)
+
         # Start the download worker in the thread pool
         self.thread_pool.start(new_transfer.download_worker)
         self.queue_display_append(new_transfer.download_worker.job_source)

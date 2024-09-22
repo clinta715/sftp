@@ -4,6 +4,7 @@ from PyQt5.QtCore import Qt, QModelIndex
 from icecream import ic
 import os
 import stat
+import time
 
 from sftp_remotefiletablemodel import RemoteFileTableModel
 from sftp_creds import get_credentials, create_random_integer, set_credentials, create_random_integer
@@ -19,12 +20,20 @@ class RemoteFileBrowser(FileBrowser):
         # Set horizontal scroll bar policy for the entire table
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
 
-        # Resize the first column based on its contents
-        # self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        ic()
         # Make all columns resizable
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         set_credentials(self.session_id, 'current_remote_directory', self.sftp_getcwd())
+
+        # Initialize the model immediately
+        self.initialize_model()
+
+    def initialize_model(self):
+        creds = get_credentials(self.session_id)
+        current_dir = creds.get('current_remote_directory', '.')
+        if not self.model.file_list:
+            self.model.get_files()
+        self.change_directory(current_dir, force_refresh=False)
+        self.table.resizeColumnsToContents()
 
     def is_remote_browser(self):
         return True
@@ -76,49 +85,55 @@ class RemoteFileBrowser(FileBrowser):
         ic(new_path)
         return new_path
 
-    def change_directory(self, path ):
+    def change_directory(self, path, force_refresh=True):
         creds = get_credentials(self.session_id)
         job_id = create_random_integer()
-        queue = create_response_queue( job_id )
+        queue = create_response_queue(job_id)
         
         try:
-            # Remote file browser
             if path == "..":
                 head, tail = self.split_path(creds.get('current_remote_directory'))
                 new_path = head
             else:
-                # Ensure there's a trailing slash at the end of the input path
-                new_path = os.path.join(creds.get('current_remote_directory'),path)
+                new_path = os.path.join(creds.get('current_remote_directory'), path)
 
-            # sessions are transient but lets make sure the folder exists
-            add_sftp_job(new_path.replace("\\", "/"), True, new_path.replace("\\", "/"), True, creds.get('hostname'), creds.get('username'), creds.get('password'), creds.get('port'), "chdir", job_id)
+            # Check if the new path is in the cache and force_refresh is False
+            if not force_refresh and new_path in self.model.cache and time.time() - self.model.cache_time.get(new_path, 0) < self.model.cache_duration:
+                set_credentials(self.session_id, 'current_remote_directory', new_path)
+                self.model.file_list = self.model.cache[new_path]
+                self.model.layoutChanged.emit()
+                self.message_signal.emit(f"{new_path}")
+                self.notify_observers()
+                self.table.viewport().update()
+                return True
+
+            # If not in cache or force_refresh is True, proceed with SFTP operation
+            add_sftp_job(new_path.replace("\\", "/"), True, new_path.replace("\\", "/"), True, 
+                         creds.get('hostname'), creds.get('username'), creds.get('password'), 
+                         creds.get('port'), "chdir", job_id)
 
             self.progressBar.setRange(0, 0)
             while queue.empty():
-                self.non_blocking_sleep(100)  # Sleeps for 1000 milliseconds (1 second)
+                self.non_blocking_sleep(100)
             response = queue.get_nowait()
             self.progressBar.setRange(0, 100)
 
             if response == "error":
-                response = queue.get_nowait()
-                raise response
-            else:
-                # if success, set our new remote working path to the newly created path path that we path'd pathily'
-                set_credentials(self.session_id, 'current_remote_directory', new_path)
+                raise queue.get_nowait()
 
+            set_credentials(self.session_id, 'current_remote_directory', new_path)
             self.message_signal.emit(f"{new_path}")
-            self.model.get_files()
+            self.model.get_files(force_refresh=force_refresh)
             self.notify_observers()
             self.table.viewport().update()
-            f = True
+            return True
+
         except Exception as e:
-            # Emit the message signal
             self.message_signal.emit(f"change_directory() {e}")
-            f = False
+            return False
 
         finally:
             delete_response_queue(job_id)
-            return f
 
     def double_click_handler(self, index):
         creds = get_credentials(self.session_id)

@@ -1,5 +1,5 @@
 from PyQt5.QtCore import QVariant, QAbstractTableModel, QModelIndex, Qt
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QColor
 from pathlib import Path
 import os
 import datetime
@@ -86,7 +86,12 @@ class FileTableModel(QAbstractTableModel):
             if column == 0:
                 # Name
                 name = file_info[0]
-                return name
+                full_path = os.path.join(str(self.directory), name)
+                is_dir = os.path.isdir(full_path)
+                if is_dir:
+                    return f"📁 {name}"  # Add folder icon for directories
+                else:
+                    return f"📄 {name}"  # Add document icon for files
             elif column == 1:
                 # Size
                 return str(file_info[1])
@@ -100,24 +105,26 @@ class FileTableModel(QAbstractTableModel):
             # Check if it's a directory
             name = file_info[0]
             if name == "..":
-                return QVariant(Qt.blue)
+                return QColor(Qt.blue)
             full_path = os.path.join(str(self.directory), name)
             is_dir = os.path.isdir(full_path)
             if is_dir:
-                return QVariant(Qt.blue)  # Return blue color for directories
+                return QColor(Qt.blue)  # Return blue color for directories
+            else:
+                return QColor(Qt.darkGray)  # Return dark gray for files
         elif role == Qt.FontRole:
             # Check if it's a directory
             name = file_info[0]
             if name == "..":
                 font = QFont()
                 font.setBold(True)
-                return QVariant(font)
+                return font
             full_path = os.path.join(str(self.directory), name)
             is_dir = os.path.isdir(full_path)
             if is_dir:
                 font = QFont()
                 font.setBold(True)
-                return QVariant(font)  # Return bold font for directories
+                return font  # Return bold font for directories
         return QVariant()
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):

@@ -1,8 +1,9 @@
 from PyQt5.QtCore import QVariant,QAbstractTableModel,QModelIndex,QTimer, QDateTime, Qt, QEventLoop
 import base64
 import queue
+import time
 from icecream import ic
-
+from PyQt5.QtGui import QFont, QColor
 from sftp_creds import get_credentials, create_random_integer
 from sftp_downloadworkerclass import create_response_queue, delete_response_queue, add_sftp_job
 
@@ -12,7 +13,10 @@ class RemoteFileTableModel(QAbstractTableModel):
         self.session_id = session_id
         self.file_list = []  # Initialize as an empty list
         self.column_names = ['Name', 'Size', 'Permissions', 'Modified']
-        self.get_files()
+        self.cache = {}  # Add a cache for directory listings
+        self.cache_time = {}  # Track when each directory was last updated
+        self.cache_duration = 60  # Cache duration in seconds
+        # Removed self.get_files() call from here
 
     def is_remote_browser(self):
         return True
@@ -32,35 +36,36 @@ class RemoteFileTableModel(QAbstractTableModel):
         try:
             file = self.file_list[index.row()]
         except Exception as e:
-            pass
+            return QVariant()
 
         column = index.column()
+        is_directory = str(file[2]).startswith('070') or str(file[2]).startswith('075')
 
         if role == Qt.DisplayRole:
             if column == 0:
-                try:
-                    return file[0]  # name
-                except Exception as e:
-                    pass
-                    return ""
+                if is_directory:
+                    return f"📁 {file[0]}"  # Add folder icon for directories
+                else:
+                    return f"📄 {file[0]}"  # Add document icon for files
             elif column == 1:
-                try:
-                    return str(file[1])  # size
-                except Exception as e:
-                    pass
-                    return ""
+                return str(file[1])  # size
             elif column == 2:
-                try:
-                    return file[2]  # permissions
-                except Exception as e:
-                    pass
-                    return ""
+                return file[2]  # permissions
             elif column == 3:
-                try:
-                    return file[3]  # modified_date
-                except Exception as e:
-                    pass
-                    return ""
+                return file[3]  # modified_date
+
+        if role == Qt.FontRole:
+            font = QFont()
+            if is_directory:
+                font.setBold(True)
+            return font
+
+        if role == Qt.ForegroundRole:
+            if is_directory:
+                return QColor(Qt.blue)
+            else:
+                return QColor(Qt.darkGray)
+
         return QVariant()
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
@@ -99,56 +104,38 @@ class RemoteFileTableModel(QAbstractTableModel):
         # ic("Emitting layoutchanged")
         self.layoutChanged.emit()
 
-    def get_files(self):
+    def get_files(self, force_refresh=False):
         creds = get_credentials(self.session_id)
-        """
-        Fetches file attributes from the specified path using the given SFTP connection.
-        :param sftp: Paramiko SFTP client object
-        :param path: Path to the directory on the remote server
-        """
-        # List all files and directories in the specified path
-        items = self.sftp_listdir_attr(creds.get('current_remote_directory'))
-        # Clear the existing file list
-        # Inform the view that the model is about to be reset
-        self.beginResetModel()
-        self.file_list.clear()
+        current_dir = creds.get('current_remote_directory', '.')
 
-        # Add the '..' entry to represent the parent directory
-        # Assuming that size, permissions, and modified_time for '..' are not relevant, set them to default values
-        self.file_list.append(("..", 0, "----", "----"))
+        # Check if we have a recent cache for this directory and force_refresh is False
+        if not force_refresh and current_dir in self.cache and time.time() - self.cache_time.get(current_dir, 0) < self.cache_duration:
+            if self.file_list == self.cache[current_dir]:
+                return  # Data is already up to date, no need to emit signals
+            self.file_list = self.cache[current_dir]
+            self.layoutChanged.emit()
+            return
+
+        # If not in cache, cache is expired, or force_refresh is True, fetch the directory listing
+        items = self.sftp_listdir_attr(current_dir)
+        
+        self.beginResetModel()
+        new_file_list = [("..", 0, "----", "----")]  # Add the '..' entry
 
         for item in items:
-            # Get file name
             try:
                 name = item.filename
-            except Exception as e:
-                name = ""
-
-            # Get file size
-            try:
                 size = item.st_size
-            except Exception as e:
-                size = 0
-
-            # Get file permissions (convert to octal string)
-            try:
                 permissions = oct(item.st_mode)[-4:]
-            except Exception as e:
-                permissions = ""
-
-            # Get file modification time and convert it to a readable format
-            try:
                 modified_time = QDateTime.fromSecsSinceEpoch(item.st_mtime).toString(Qt.ISODate)
+                new_file_list.append((name, size, permissions, modified_time))
             except Exception as e:
-                modified_time = ""
+                ic(f"Error processing file {item.filename if hasattr(item, 'filename') else 'unknown'}: {str(e)}")
 
-            # Append the file information to the list
-            self.file_list.append((name, size, permissions, modified_time))
-
-        # Emit dataChanged for the entire range of data
-        top_left = self.createIndex(0, 0)  # Top left cell of the table
-        bottom_right = self.createIndex(self.rowCount() - 1, self.columnCount() - 1)  # Bottom right cell
-        self.dataChanged.emit(top_left, bottom_right)
+        # Update cache and file_list
+        self.file_list = new_file_list
+        self.cache[current_dir] = self.file_list
+        self.cache_time[current_dir] = time.time()
         self.endResetModel()
         self.layoutChanged.emit()
 
@@ -189,3 +176,11 @@ class RemoteFileTableModel(QAbstractTableModel):
             return list
         else:
             return f
+
+    def invalidate_cache(self, directory=None):
+        if directory:
+            self.cache.pop(directory, None)
+            self.cache_time.pop(directory, None)
+        else:
+            self.cache.clear()
+            self.cache_time.clear()
