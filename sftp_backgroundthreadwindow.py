@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QListWidget, QTextEdit, QProgressBar, QSizePolicy, QLabel
-from PyQt5.QtCore import QThreadPool, QTimer
+from PyQt5.QtCore import QThreadPool, QTimer, Qt
 from icecream import ic
 import os
 
@@ -17,6 +17,9 @@ class BackgroundThreadWindow(QMainWindow):
         self.observees = []
         self.total_queue_items = 0  # New attribute to track total queue items
         self.init_ui()
+        
+        # Set a fixed size for the window
+        self.setFixedSize(400, 500)  # Adjust width and height as needed
 
     def add_observee(self,observee):
         if observee not in self.observees:
@@ -59,10 +62,14 @@ class BackgroundThreadWindow(QMainWindow):
         self.layout.addLayout(self.overall_progress_layout)
 
         self.list_widget = QListWidget()
+        self.list_widget.setMaximumHeight(200)  # Set maximum height
+        self.list_widget.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)  # Always show vertical scrollbar
         self.layout.addWidget(self.list_widget)
 
         self.text_console = QTextEdit()
         self.text_console.setReadOnly(True)  # Make the text console read-only
+        self.text_console.setMaximumHeight(200)  # Set maximum height
+        self.text_console.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)  # Always show vertical scrollbar
         self.text_console.setSizePolicy(size_policy)
         self.text_console.textChanged.connect(self.scroll_to_bottom)
         self.layout.addWidget(self.text_console)
@@ -75,7 +82,7 @@ class BackgroundThreadWindow(QMainWindow):
         # Setup a QTimer to periodically check the queue
         self.check_queue_timer = QTimer(self)
         self.check_queue_timer.timeout.connect(self.check_and_start_transfers)
-        self.check_queue_timer.start(100)  # Check every 1000 ms (1 second)
+        self.check_queue_timer.start(100)  # Check every 100 ms
 
     def remove_queue_item_by_id(self, id_to_remove):
         ic()
