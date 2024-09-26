@@ -19,7 +19,7 @@ def save_connection_data(host_data):
         "usernames": host_data["usernames"],
         "passwords": {k: cipher_suite.encrypt(v.encode()).decode() for k, v in host_data["passwords"].items()},
         "ports": host_data["ports"],
-        "encryption_key": encryption_key  # No need to decode the encryption key
+        "encryption_key": encryption_key.decode() if isinstance(encryption_key, bytes) else encryption_key
     }
     with open('connection_data.json', 'w') as f:
         json.dump(data, f)
@@ -41,31 +41,17 @@ def load_connection_data():
         host_data["ports"] = data.get("ports", {})
 
         return host_data
+    except FileNotFoundError:
+        # If the file doesn't exist, generate a new encryption key
+        encryption_key = Fernet.generate_key()
+        cipher_suite = Fernet(encryption_key)
+        return host_data
     except Exception as e:
-        ic(e)
-        data = {
-            "hostnames": {
-                "example.com": "example.com",
-                "testserver.local": "testserver.local"
-            },
-            "usernames": {
-                "example.com": "user1",
-                "testserver.local": "user2"
-            },
-            "passwords": {
-                "example.com": "password123",
-                "testserver.local": "testpass"
-            },
-            "ports": {
-                "example.com": 22,
-                "testserver.local": 2222
-            }
-        }
-        ic(data)
-        
-        # Set host_data with either loaded or fake data
-        host_data = data
-        return data
+        print(f"Error loading connection data: {str(e)}")
+        # If there's any other error, generate a new encryption key
+        encryption_key = Fernet.generate_key()
+        cipher_suite = Fernet(encryption_key)
+        return host_data
 
 class HostDataEditor(QDialog):  # Change QWidget to QDialog
     def __init__(self):
