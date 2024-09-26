@@ -233,31 +233,50 @@ class RemoteFileBrowser(FileBrowser):
         self.always = always
         creds = get_credentials(self.session_id)
 
-        if remote_path == None or remote_path == False:
+        if remote_path is None or remote_path is False:
             current_browser = self.focusWidget()
             if current_browser is not None:
                 current_index = current_browser.currentIndex()
                 if current_index.isValid():
                     # Assuming the first column holds the item text you need
                     selected_item = current_browser.model().data(current_index, Qt.DisplayRole)
+                    selected_item = selected_item.split(' ', 1)[-1]  # Remove the icon prefix
                     if creds.get('current_remote_directory') == '.':
                         temp_path = self.sftp_getcwd()
                     else:
                         temp_path = creds.get('current_remote_directory')
                     set_credentials(self.session_id, 'current_remote_directory', self.remove_trailing_dot(temp_path))
-                    remote_path = os.path.join( creds.get('current_remote_directory'), selected_item )
+                    remote_path = os.path.join(creds.get('current_remote_directory'), selected_item)
             else:
                 return
 
         try:
+            # Check if the remote path exists
+            if not self.sftp_exists(remote_path):
+                self.message_signal.emit(f"Remote path '{remote_path}' does not exist.")
+                return
+
+            # Check if it's a file
+            if self.is_remote_file(remote_path):
+                self.sftp_remove(remote_path)
+                self.message_signal.emit(f"File '{remote_path}' removed successfully.")
+                return
+
             # Get attributes of directory contents
             directory_contents_attr = self.sftp_listdir_attr(remote_path)
+
+            if directory_contents_attr is False:
+                self.message_signal.emit(f"Failed to get contents of '{remote_path}'. It might be an empty directory.")
+                # Try to remove the directory even if it's empty
+                self.sftp_rmdir(remote_path)
+                self.message_signal.emit(f"Empty directory '{remote_path}' removed successfully.")
+                return
 
             # Separate files and subdirectories
             subdirectories = [entry for entry in directory_contents_attr if stat.S_ISDIR(entry.st_mode)]
             files = [entry for entry in directory_contents_attr if stat.S_ISREG(entry.st_mode)]
 
-            if subdirectories or files:
+            if (subdirectories or files) and not self.always:
                 response = QMessageBox.question(
                     None,
                     'Confirmation',

@@ -1,6 +1,6 @@
 import sys
-import base64
 import os
+import base64
 import argparse
 import json
 import platform
@@ -8,16 +8,30 @@ import time
 # import qdarktheme
 import logging
 
+# Redirect stderr to suppress IMKClient and IMKInputSession messages
+if platform.system() == 'Darwin':  # Check if running on macOS
+    sys.stderr = open(os.devnull, 'w')
+
+# Define DEBUG flag at the top of the file
+DEBUG = False
+
 from icecream import ic
 ic.configureOutput(prefix='DEBUG | ')
-ic.disable()
+if DEBUG:
+    ic.enable()
+else:
+    ic.disable()
 from PyQt5.QtWidgets import QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QTextEdit, QCompleter, QComboBox, QSpinBox, QTabWidget, QMessageBox
 from PyQt5.QtCore import pyqtSignal, QObject, QCoreApplication, Qt, QTimer, QEvent
+from PyQt5.QtCore import pyqtSignal
 from cryptography.fernet import Fernet
 
 # Configure logging
-##logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-##logging.getLogger("paramiko").setLevel(logging.WARNING)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.getLogger("paramiko").setLevel(logging.WARNING)
+
+# Add a debug flag
+DEBUG = False
 
 from sftp_downloadworkerclass import transferSignals, add_sftp_job, clear_sftp_queue
 from PyQt5.QtCore import pyqtSignal
@@ -52,9 +66,12 @@ class WorkerSignals(QObject):
     error = pyqtSignal(int, str)
 
 class MainWindow(QMainWindow):  # Inherits from QMainWindow
+    message_signal = pyqtSignal(str)
+
     def __init__(self):
         super().__init__()
         self.transfers_message = transferSignals()
+        self.message_signal.connect(self.update_console)
 
         # Custom data structure to store hostname, username, and password together
         self.create_initial_data()
@@ -234,6 +251,10 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         self.backgroundThreadWindow.add_observee(self.right_browser)
         self.backgroundThreadWindow.add_observee(self.left_browser)
 
+        # Connect message signals
+        self.left_browser.message_signal.connect(self.update_console)
+        self.right_browser.message_signal.connect(self.update_console)
+
         # Create tab-specific output console
         tab_output_console = QTextEdit()
         tab_output_console.setReadOnly(True)
@@ -249,7 +270,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
 
         # Set the main layout to the container widget
         container_widget.setLayout(main_layout)
-        self.log_connection_success()
+        self.message_signal.emit("Connection successful")
 
         # Initialize the remote browser model
         self.right_browser.initialize_model()
@@ -390,8 +411,11 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         MAX_TRANSFERS = value
         
     def update_console(self, message):
-        # Update the console with the received message
-        self.output_console.append(message)
+        # Update both global and tab-specific consoles
+        self.global_output_console.append(message)
+        current_tab = self.tab_widget.currentWidget()
+        if hasattr(current_tab, 'output_console'):
+            current_tab.output_console.append(message)
 
     def update_completer(self):
         # Update the list of hostnames
@@ -474,13 +498,11 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         self.temp_hostname = self.hostname_combo.currentText() if hostname == "localhost" and self.hostname_combo.currentText() else hostname
         
         # Print to the global output console
-        self.global_output_console.append(f"Attempting to connect to {self.temp_hostname}...")
-        QApplication.processEvents()  # Force GUI update
+        self.message_signal.emit(f"Attempting to connect to {self.temp_hostname}...")
         
         try:
             self.session_id = create_random_integer()
-            self.global_output_console.append(f"Created session ID: {self.session_id}")
-            QApplication.processEvents()
+            self.message_signal.emit(f"Created session ID: {self.session_id}")
 
             # Hostname, username, password, and port handling
             self.temp_hostname = self.hostname_combo.currentText() if hostname == "localhost" and self.hostname_combo.currentText() else hostname
@@ -488,8 +510,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
             self.temp_password = self.password.text() if password == "guest" and self.password.text() else password
             self.temp_port = self.port_selector.text() or port or "22"
 
-            self.global_output_console.append(f"Using hostname: {self.temp_hostname}, username: {self.temp_username}, port: {self.temp_port}")
-            QApplication.processEvents()
+            self.message_signal.emit(f"Using hostname: {self.temp_hostname}, username: {self.temp_username}, port: {self.temp_port}")
 
             if not self.temp_hostname:
                 raise ValueError("Hostname is required")
@@ -503,44 +524,36 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
                 raise ValueError("Port must be a valid number")
 
             # Set credentials synchronously
-            self.global_output_console.append("Setting credentials...")
-            QApplication.processEvents()
+            self.message_signal.emit("Setting credentials...")
             self.set_credentials_async()
 
             # Test the connection
-            self.global_output_console.append("Testing connection...")
-            QApplication.processEvents()
+            self.message_signal.emit("Testing connection...")
             self.test_connection()
 
             # Create a new QWidget as a container for both the file table and the output console
-            self.global_output_console.append("Preparing container widget...")
-            QApplication.processEvents()
+            self.message_signal.emit("Preparing container widget...")
             self.container_widget = self.prepare_container_widget()
 
             # Add tab synchronously
-            self.global_output_console.append("Adding new tab...")
-            QApplication.processEvents()
+            self.message_signal.emit("Adding new tab...")
             self.YouAddTab(self.session_id, self.container_widget)
 
-            self.global_output_console.append(f"Successfully connected to {self.temp_hostname}")
-            QApplication.processEvents()
+            self.message_signal.emit(f"Successfully connected to {self.temp_hostname}")
 
             # Save connection data synchronously
-            self.global_output_console.append("Saving connection data...")
-            QApplication.processEvents()
+            self.message_signal.emit("Saving connection data...")
             self.save_connection_data_async()
 
             return self.session_id
         except ValueError as ve:
             error_message = str(ve)
             QMessageBox.critical(self, "Connection Error", error_message)
-            self.global_output_console.append(f"Connection failed: {error_message}")
-            QApplication.processEvents()
+            self.message_signal.emit(f"Connection failed: {error_message}")
         except Exception as e:
             error_message = f"Unexpected error: {str(e)}"
             QMessageBox.critical(self, "Connection Error", error_message)
-            self.global_output_console.append(f"Connection failed: {error_message}")
-            QApplication.processEvents()
+            self.message_signal.emit(f"Connection failed: {error_message}")
         return None
 
     def test_connection(self):
@@ -548,15 +561,12 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         try:
-            self.global_output_console.append(f"Attempting SSH connection to {self.temp_hostname}:{self.temp_port}...")
-            QApplication.processEvents()
+            self.message_signal.emit(f"Attempting SSH connection to {self.temp_hostname}:{self.temp_port}...")
             ssh.connect(self.temp_hostname, port=self.temp_port, username=self.temp_username, password=self.temp_password)
-            self.global_output_console.append("SSH connection successful")
-            QApplication.processEvents()
+            self.message_signal.emit("SSH connection successful")
             ssh.close()
         except Exception as e:
-            self.global_output_console.append(f"SSH connection failed: {str(e)}")
-            QApplication.processEvents()
+            self.message_signal.emit(f"SSH connection failed: {str(e)}")
             raise Exception(f"Failed to connect: {str(e)}")
 
     def set_credentials_async(self):
@@ -590,7 +600,11 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         }
             
     def cleanup(self):
-        print("Cleanup method called")
+        if hasattr(self, 'cleanup_performed'):
+            return
+        self.cleanup_performed = True
+        
+        logging.info("Cleanup method called")
         cleanup_tasks = [
             self.close_sftp_connections,
             clear_sftp_queue,
@@ -599,11 +613,11 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         ]
         for task in cleanup_tasks:
             try:
-                print(f"Performing cleanup task: {task.__name__ if hasattr(task, '__name__') else 'lambda'}")
+                logging.info(f"Performing cleanup task: {task.__name__ if hasattr(task, '__name__') else 'lambda'}")
                 task()
             except Exception as e:
-                print(f"Error during cleanup task: {str(e)}")
-        print("All cleanup tasks completed.")
+                logging.error(f"Error during cleanup task: {str(e)}")
+        logging.info("All cleanup tasks completed.")
         QTimer.singleShot(0, QCoreApplication.instance().quit)
 
     # Remove the perform_next_cleanup_task method as it's no longer needed
@@ -663,10 +677,14 @@ def main():
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     args = parser.parse_args()
 
-    # if args.debug:
-    # ic.enable()
-    # else:
-    ic.disable()
+    global DEBUG
+    DEBUG = args.debug
+    if DEBUG:
+        ic.enable()
+        logging.getLogger().setLevel(logging.DEBUG)
+    else:
+        ic.disable()
+        logging.getLogger().setLevel(logging.INFO)
 
     def hide_transfers_window():
         if not hasattr(hide_transfers_window, "transfers_hidden"):
