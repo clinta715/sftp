@@ -409,7 +409,6 @@ class Browser(QWidget):
             ic(is_directory)
             return is_directory
 
-
     def is_remote_file(self, partial_remote_path):
         is_file = False
         ic()
@@ -579,39 +578,43 @@ class Browser(QWidget):
             self.message_signal.emit(f"change_directory() {e}")
 
     def double_click_handler(self, index):
-        # this function tries to figure out, more or less sans a lot of context, what 'index' is pointing at and then, what to do with it
-        # my logic here was, if its a directory change to it, if its a file transfer it
-        # if its a local file, probably want to upload it, if its a remote file, probably want to download it
         creds = get_credentials(self.session_id)
-
         if index.isValid():
-            # Retrieve the data from the model
-            path = self.model.data(index, Qt.DisplayRole)
-            path = path.split(' ', 1)[-1]  # Remove the icon prefix
-            # Now you can use 'text' as needed
+            # Always get the data from the first column (filename)
+            filename_index = self.model.index(index.row(), 0)
+            filename = self.model.data(filename_index, Qt.DisplayRole)
+
+            # Remove the icon prefix if present
+            filename = filename.split(' ', 1)[-1] if ' ' in filename else filename
 
         try:
-            if path == "..":
-                head, tail = self.split_path(creds.get('current_local_directory'))
+            if filename == "..":
+                head, _ = self.split_path(creds.get('current_local_directory'))
                 new_path = head
-                # ic(new_path)
             else:
-                new_path = os.path.join(creds.get('current_local_directory'), path)  # Assuming the text of the item contains the file path
+                new_path = os.path.join(creds.get('current_local_directory'), filename)
 
             # Check if the item is a directory
             is_directory = os.path.isdir(new_path)
+
             if is_directory:
-                # Change the current working directory or perform other actions
+                # Change the current working directory
                 self.change_directory(new_path)
             else:
-                # Upload the file to the remote server
-                remote_path, _ = QFileDialog.getSaveFileName(self, "Select Remote Location", os.path.basename(path))
-                if remote_path:
-                    self.upload_download(new_path)
+                # Handle file upload/download
+                if self.is_local_view:
+                    # Upload the file to the remote server
+                    remote_path, _ = QFileDialog.getSaveFileName(self, "Select Remote Location", filename)
+                    if remote_path:
+                        self.upload_download(new_path)
+                else:
+                    # Download the file from the remote server
+                    local_path, _ = QFileDialog.getSaveFileName(self, "Select Local Location", filename)
+                    if local_path:
+                        self.upload_download(new_path)
 
-        except Exception as e:
-            # Append error message to the output_console
-            self.message_signal.emit(f"double_click_handler() {e}")
+    except Exception as e:
+        self.message_signal.emit(f"double_click_handler() error: {e}")
 
     def context_menu_handler(self, point):
         # If point is not provided, use the center of the list widget
@@ -648,37 +651,33 @@ class Browser(QWidget):
     def upload_download(self):
         ic()
         creds = get_credentials(self.session_id)
-
         current_browser = self.focusWidget()
-
         if current_browser is not None and isinstance(current_browser, QTableView):
             indexes = current_browser.selectedIndexes()
             has_valid_item = False  # Track if any valid items were found
-
             for index in indexes:
                 ic(index)
-                selected_item_text = ""
-
+                filename = ""
                 if isinstance(index, QModelIndex):
                     if index.isValid():
-                        selected_item_text = current_browser.model().data(index, Qt.DisplayRole)
-                        # Remove the decorative icon prefix
-                        selected_item_text = selected_item_text.split(' ', 1)[-1]
+                        # Always get the data from the first column (filename)
+                        filename_index = current_browser.model().index(index.row(), 0)
+                        filename = current_browser.model().data(filename_index, Qt.DisplayRole)
+                        # Remove the decorative icon prefix if present
+                        filename = filename.split(' ', 1)[-1] if ' ' in filename else filename
                 elif isinstance(index, str):
-                    selected_item_text = index
-                    # Remove the decorative icon prefix
-                    selected_item_text = selected_item_text.split(' ', 1)[-1]
+                    filename = index
+                    # Remove the decorative icon prefix if present
+                    filename = filename.split(' ', 1)[-1] if ' ' in filename else filename
 
-                if selected_item_text:
+                if filename:
                     # Construct the full path of the selected item
-                    if not self.is_complete_path(selected_item_text):
-                        selected_path = os.path.join(creds.get('current_local_directory'), selected_item_text)
+                    if not self.is_complete_path(filename):
+                        selected_path = os.path.join(creds.get('current_local_directory'), filename)
                     else:
-                        selected_path = self.normalize_path(selected_item_text)
-
+                        selected_path = self.normalize_path(filename)
                     try:
-                        remote_entry_path = self.get_normalized_remote_path(creds.get('current_remote_directory'), selected_item_text)
-
+                        remote_entry_path = self.get_normalized_remote_path(creds.get('current_remote_directory'), filename)
                         if os.path.isdir(selected_path):
                             self.message_signal.emit(f"Uploading directory: {selected_path}")
                             self.upload_directory(selected_path, remote_entry_path)
@@ -693,7 +692,7 @@ class Browser(QWidget):
                         self.message_signal.emit(f"upload_download() encountered an error: {e}")
                 else:
                     self.message_signal.emit("Invalid item or empty path.")
-            
+
             if not has_valid_item:
                 self.message_signal.emit("No valid items selected.")
         else:

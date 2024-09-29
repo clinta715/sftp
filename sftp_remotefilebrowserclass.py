@@ -9,7 +9,6 @@ import time
 from sftp_remotefiletablemodel import RemoteFileTableModel
 from sftp_creds import get_credentials, create_random_integer, set_credentials, create_random_integer
 from sftp_downloadworkerclass import create_response_queue, delete_response_queue, add_sftp_job, QueueItem
-# from sftp_backgroundthreadwindow import queue_display_append
 
 class RemoteFileBrowser(FileBrowser):
     def prompt_overwrite(self, item_path):
@@ -91,7 +90,6 @@ class RemoteFileBrowser(FileBrowser):
         job_id = create_random_integer()
         queue = create_response_queue( job_id )
 
-        ic()
         ic(creds)
 
         try:
@@ -174,40 +172,48 @@ class RemoteFileBrowser(FileBrowser):
 
             # Always get the data from the first column (filename)
             filename_index = self.model.index(index.row(), 0)
-            temp_path = self.model.data(filename_index, Qt.DisplayRole)
-            temp_path = temp_path.split(' ', 1)[-1]  # Remove the icon prefix
-            
+            filename = self.model.data(filename_index, Qt.DisplayRole)
+
+            # Remove the icon prefix if present
+            filename = filename.split(' ', 1)[-1] if ' ' in filename else filename
+
+            ic(filename)
+
             # Early return for parent directory navigation
-            if temp_path == "..":
-                ic()
-                self.change_directory(temp_path)
-                return True
+            if filename == "..":
+                ic("Navigating to parent directory")
+                return self.change_directory("..")
 
             # Determine the full path
-            if not self.is_complete_path(temp_path):
-                path = self.get_normalized_remote_path(creds.get('current_remote_directory'), temp_path)
+            if self.is_complete_path(filename):
+                path = filename
             else:
-                path = temp_path
-            
+                path = self.get_normalized_remote_path(creds.get('current_remote_directory'), filename)
+
             ic(path)
 
             # Check if the path is a directory or a file
             if self.is_remote_directory(path):
-                self.change_directory(path)
+                ic(path)
+                return self.change_directory(path)
             elif self.is_remote_file(path):
-                local_path = QFileDialog.getSaveFileName(self, "Save File", os.path.basename(temp_path))[0]
-                ic(temp_path, local_path)
+                local_path, _ = QFileDialog.getSaveFileName(self, "Save File", filename)
                 if local_path:
-                    # Call upload_download to handle download (or upload if it was local)
-                    ic()
+                    ic(path,local_path)
                     self.upload_download(path, local_path)
-                    # Emit a signal or log the download
                     self.message_signal.emit(f"Downloaded file: {path} to {local_path}")
-            
-            return True
+                    return True
+                else:
+                    ic("File download cancelled by user")
+                    return False
+            else:
+                ic(path)
+                self.message_signal.emit(f"Unable to process: {path}. It's neither a directory nor a file.")
+                return False
 
         except Exception as e:
             ic(e)
+            self.message_signal.emit(f"Error processing: {filename}. Details: {str(e)}")
             return False
 
     def change_directory_handler(self):
@@ -216,7 +222,6 @@ class RemoteFileBrowser(FileBrowser):
         if not ok:
             return
 
-        ic()
         ic(selected_item)
 
         if self.is_remote_directory(selected_item):
@@ -232,15 +237,17 @@ class RemoteFileBrowser(FileBrowser):
     def remove_directory_with_prompt(self, remote_path=None, always=0):
         self.always = always
         creds = get_credentials(self.session_id)
-
         if remote_path is None or remote_path is False:
             current_browser = self.focusWidget()
-            if current_browser is not None:
+            if current_browser is not None and isinstance(current_browser, QTableView):
                 current_index = current_browser.currentIndex()
                 if current_index.isValid():
-                    # Assuming the first column holds the item text you need
-                    selected_item = current_browser.model().data(current_index, Qt.DisplayRole)
-                    selected_item = selected_item.split(' ', 1)[-1]  # Remove the icon prefix
+                    # Always get the data from the first column (filename)
+                    filename_index = current_browser.model().index(current_index.row(), 0)
+                    selected_item = current_browser.model().data(filename_index, Qt.DisplayRole)
+                    # Remove the icon prefix if present
+                    selected_item = selected_item.split(' ', 1)[-1] if ' ' in selected_item else selected_item
+
                     if creds.get('current_remote_directory') == '.':
                         temp_path = self.sftp_getcwd()
                     else:
@@ -249,33 +256,27 @@ class RemoteFileBrowser(FileBrowser):
                     remote_path = os.path.join(creds.get('current_remote_directory'), selected_item)
             else:
                 return
-
         try:
             # Check if the remote path exists
             if not self.sftp_exists(remote_path):
                 self.message_signal.emit(f"Remote path '{remote_path}' does not exist.")
                 return
-
             # Check if it's a file
             if self.is_remote_file(remote_path):
                 self.sftp_remove(remote_path)
                 self.message_signal.emit(f"File '{remote_path}' removed successfully.")
                 return
-
             # Get attributes of directory contents
             directory_contents_attr = self.sftp_listdir_attr(remote_path)
-
             if directory_contents_attr is False:
                 self.message_signal.emit(f"Failed to get contents of '{remote_path}'. It might be an empty directory.")
                 # Try to remove the directory even if it's empty
                 self.sftp_rmdir(remote_path)
                 self.message_signal.emit(f"Empty directory '{remote_path}' removed successfully.")
                 return
-
             # Separate files and subdirectories
             subdirectories = [entry for entry in directory_contents_attr if stat.S_ISDIR(entry.st_mode)]
             files = [entry for entry in directory_contents_attr if stat.S_ISREG(entry.st_mode)]
-
             if (subdirectories or files) and not self.always:
                 response = QMessageBox.question(
                     None,
@@ -284,39 +285,33 @@ class RemoteFileBrowser(FileBrowser):
                     QMessageBox.Yes | QMessageBox.No | QMessageBox.YesToAll,
                     QMessageBox.No
                 )
-
                 if response == QMessageBox.YesToAll:
                     self.always = 1
-
                 if response == QMessageBox.No:
                     return
- 
+
             # Remove files
             for entry in files:
                 entry_path = os.path.join(remote_path, entry.filename)
                 self.message_signal.emit(f"Removing file: {entry_path}")
                 self.sftp_remove(entry_path)
-
             # Recursively remove subdirectories
             for entry in subdirectories:
                 entry_path = os.path.join(remote_path, entry.filename)
                 self.message_signal.emit(f"Recursing into subdirectory: {entry_path}")
                 self.remove_directory_with_prompt(entry_path, self.always)
-
             # Remove the directory
             self.sftp_rmdir(remote_path)
             self.message_signal.emit(f"Directory '{remote_path}' removed successfully.")
-
         except Exception as e:
-            self.message_signal.emit(f"remove_directory_with_prompt() {e}")
-
+            self.message_signal.emit(f"remove_directory_with_prompt() error: {e}")
         finally:
             self.model.invalidate_cache()
             self.model.get_files(force_refresh=True)
 
     def upload_download(self, optionalpath=None):
         creds = get_credentials(self.session_id)
-        
+
         if creds.get('current_remote_directory') == '.':
             current_remote_directory = self.sftp_getcwd()
             set_credentials(self.session_id, 'current_remote_directory', current_remote_directory)
@@ -328,8 +323,8 @@ class RemoteFileBrowser(FileBrowser):
 
         if current_browser is not None and isinstance(current_browser, QTableView):
             indexes = current_browser.selectedIndexes()
-            has_valid_item = False  # Track if we found any valid items
-            
+            has_valid_item = False
+
             skip_all = False
             overwrite_all = False
 
@@ -337,26 +332,28 @@ class RemoteFileBrowser(FileBrowser):
                 # Always get the data from the first column (filename)
                 filename_index = self.model.index(index.row(), 0)
                 selected_item_text = self.model.data(filename_index, Qt.DisplayRole)
-                selected_item_text = selected_item_text.split(' ', 1)[-1]  # Remove the icon prefix
+
+                # Extract only the filename, assuming it's the last part after whitespace
+                filename = selected_item_text.split()[-1]
 
                 if optionalpath:
-                    selected_item_text = optionalpath
+                    filename = optionalpath
 
-                if selected_item_text:
+                if filename:
                     try:
-                        if optionalpath == None:
-                            remote_entry_path = self.get_normalized_remote_path(current_remote_directory, selected_item_text)
+                        if optionalpath is None:
+                            remote_entry_path = self.get_normalized_remote_path(current_remote_directory, filename)
                         else:
-                            remote_entry_path = self.get_normalized_remote_path(selected_item_text)
+                            remote_entry_path = self.get_normalized_remote_path(filename)
 
                         local_base_path = creds.get('current_local_directory')
-                        local_entry_path = os.path.join(local_base_path, selected_item_text)
+                        local_entry_path = os.path.join(local_base_path, filename)
 
-                        ic(selected_item_text)
+                        ic(filename)
                         ic(remote_entry_path)
                         ic(local_base_path)
                         ic(local_entry_path)
-
+                        
                         if self.is_remote_directory(remote_entry_path):
                             ic(remote_entry_path)
                             if not skip_all and not overwrite_all and os.path.exists(local_entry_path):
@@ -396,22 +393,23 @@ class RemoteFileBrowser(FileBrowser):
                                             self.init_password, self.init_port, 
                                             "download", job_id)
                         has_valid_item = True  # Mark as valid item found
+                        
                     except Exception as e:
                         error_message = f"upload_download() encountered an error: {str(e)}"
                         self.message_signal.emit(error_message)
                         ic(e)
                 else:
                     self.message_signal.emit("No valid path provided.")
-            
+
             if not has_valid_item:
                 self.message_signal.emit("No valid items selected.")
         else:
             self.message_signal.emit("Current browser is not a valid QTableView.")
-        
+
         # Force refresh after upload/download operations
         self.model.invalidate_cache()
         self.model.get_files(force_refresh=True)
-
+        
     def download_directory(self, source_directory, destination_directory, skip_all=False, overwrite_all=False):
         ic()
 
