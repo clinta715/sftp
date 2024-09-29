@@ -1,12 +1,20 @@
 import sys
 import os
-import base64
 import argparse
-import json
 import platform
 import time
-# import qdarktheme
 import logging
+import platform
+from icecream import ic
+from sftp_downloadworkerclass import transferSignals, add_sftp_job, clear_sftp_queue
+from sftp_backgroundthreadwindow import BackgroundThreadWindow
+from sftp_hostdataeditor import HostDataEditor, save_connection_data, load_connection_data
+from sftp_remotefilebrowserclass import RemoteFileBrowser
+from sftp_filebrowserclass import FileBrowser
+from sftp_creds import get_credentials, set_credentials, del_credentials, create_random_integer
+from PyQt5.QtWidgets import QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QTextEdit, QCompleter, QComboBox, QSpinBox, QTabWidget, QMessageBox
+from PyQt5.QtCore import pyqtSignal, QObject, QCoreApplication, Qt, QTimer, QEvent
+from cryptography.fernet import Fernet
 
 # Redirect stderr to suppress IMKClient and IMKInputSession messages
 if platform.system() == 'Darwin':  # Check if running on macOS
@@ -15,36 +23,15 @@ if platform.system() == 'Darwin':  # Check if running on macOS
 # Define DEBUG flag at the top of the file
 DEBUG = False
 
-from icecream import ic
 ic.configureOutput(prefix='DEBUG | ')
 if DEBUG:
     ic.enable()
 else:
     ic.disable()
-from PyQt5.QtWidgets import QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QTextEdit, QCompleter, QComboBox, QSpinBox, QTabWidget, QMessageBox
-from PyQt5.QtCore import pyqtSignal, QObject, QCoreApplication, Qt, QTimer, QEvent
-from PyQt5.QtCore import pyqtSignal
-from cryptography.fernet import Fernet
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.getLogger("paramiko").setLevel(logging.WARNING)
-
-# Add a debug flag
-DEBUG = False
-
-from sftp_downloadworkerclass import transferSignals, add_sftp_job, clear_sftp_queue
-from PyQt5.QtCore import pyqtSignal
-from sftp_backgroundthreadwindow import BackgroundThreadWindow
-# from sftp_editwindowclass import EditDialogContainer
-from sftp_hostdataeditor import HostDataEditor, save_connection_data, load_connection_data
-from sftp_remotefilebrowserclass import RemoteFileBrowser
-from sftp_filebrowserclass import FileBrowser
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QMenu
-from sftp_creds import get_credentials, set_credentials, del_credentials, create_random_integer
-import os
-import subprocess
-import platform
 
 MAX_HOST_DATA_SIZE = 10  # Set your desired maximum size
 
@@ -303,7 +290,7 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
             self.container_layout.addWidget(self.left_browser)
 
         except Exception as e:
-            print(f"Error setting up left browser: {e}")
+            ic("Error setting up left browser:",e)
             pass
 
     def setup_right_browser(self, session_id):
@@ -322,7 +309,6 @@ class MainWindow(QMainWindow):  # Inherits from QMainWindow
         # Assuming these methods are correctly defined and handle their tasks appropriately
         self.title = self.get_session_title(self.session_id)
         
-        # print("call setup_left_browser")
         self.setup_left_browser(self.session_id)
         self.setup_right_browser(self.session_id)
         # Create tab-specific output console
@@ -677,15 +663,6 @@ def main():
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     args = parser.parse_args()
 
-    global DEBUG
-    DEBUG = args.debug
-    if DEBUG:
-        ic.enable()
-        logging.getLogger().setLevel(logging.DEBUG)
-    else:
-        ic.disable()
-        logging.getLogger().setLevel(logging.INFO)
-
     def hide_transfers_window():
         if not hasattr(hide_transfers_window, "transfers_hidden"):
             hide_transfers_window.transfers_hidden = 1  # Initialize it once
@@ -699,8 +676,6 @@ def main():
             hide_transfers_window.transfers_hidden = 0
 
     app = QApplication(sys.argv)
-    # app.setStyle('Fusion')
-    # qdarktheme.setup_theme()
 
     # create the main window of the application
     main_window = MainWindow()
@@ -722,7 +697,7 @@ def main():
                 port=str(args.port)
             )
         except Exception as e:
-            print(f"Error connecting: {str(e)}")
+            ic("Error connecting:", e)
 
     # Connect the aboutToQuit signal directly to the cleanup method
     app.aboutToQuit.connect(main_window.cleanup)

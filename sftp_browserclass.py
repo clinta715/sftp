@@ -13,7 +13,6 @@ from pathlib import Path
 
 from sftp_creds import get_credentials, create_random_integer, set_credentials
 from sftp_downloadworkerclass import create_response_queue, delete_response_queue, check_response_queue, add_sftp_job, QueueItem, queue
-# from sftp_backgroundthreadwindow import queue_display_append
 
 class Browser(QWidget):
     def __init__(self, title, session_id, parent=None):

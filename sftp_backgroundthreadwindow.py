@@ -7,42 +7,18 @@ from sftp_downloadworkerclass import Transfer, DownloadWorker, sftp_queue_get, s
 
 MAX_TRANSFERS = 4
 
-queue_display = []
-
 class BackgroundThreadWindow(QMainWindow):
     def __init__(self):
         super(BackgroundThreadWindow, self).__init__()
+        self.queue_items = []
         self.active_transfers = 0
         self.transfers = []
         self.observees = []
-        self.total_queue_items = 0  # New attribute to track total queue items
+        self.total_queue_items = 0
         self.init_ui()
         
         # Set a fixed size for the window
         self.setFixedSize(400, 500)  # Adjust width and height as needed
-
-    def add_observee(self,observee):
-        if observee not in self.observees:
-            self.observees.append(observee)
-            ic("Observee added:", observee)
-        else:
-            ic("Observee already exists:", observee)
-
-    def remove_observee(self,observee):
-        if observee in self.observees:
-            self.observees.remove(observee)
-            ic("Observer removed:", observee)
-
-    def notify_observees(self):
-            ic()
-            for observee in self.observees:
-                try:
-                    observee.get_files()  # Notify the observer by calling its update method
-                    ic("Observee notified:", observee)
-                except AttributeError as ae:
-                    ic("Observee", observee, "does not implement 'get_files' method.", ae)
-                except Exception as e:
-                    ic("An error occurred while notifying observee", observee, e)
 
     def init_ui(self):
         size_policy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -84,17 +60,44 @@ class BackgroundThreadWindow(QMainWindow):
         self.check_queue_timer.timeout.connect(self.check_and_start_transfers)
         self.check_queue_timer.start(100)  # Check every 100 ms
 
-    def remove_queue_item_by_id(self, id_to_remove):
+    def add_queue_item(self, item):
+        if item not in self.queue_items:
+            self.queue_items.append(item)
+            self.total_queue_items += 1
+            self.update_overall_progress()
+            self.list_widget.addItem(item)
+
+    def remove_queue_item(self, item):
+        if item in self.queue_items:
+            self.queue_items.remove(item)
+            self.total_queue_items -= 1
+            self.update_overall_progress()
+            items = self.list_widget.findItems(item, Qt.MatchExactly)
+            for list_item in items:
+                self.list_widget.takeItem(self.list_widget.row(list_item))
+
+    def add_observee(self, observee):
+        if observee not in self.observees:
+            self.observees.append(observee)
+            ic("Observee added:", observee)
+        else:
+            ic("Observee already exists:", observee)
+
+    def remove_observee(self, observee):
+        if observee in self.observees:
+            self.observees.remove(observee)
+            ic("Observer removed:", observee)
+
+    def notify_observees(self):
         ic()
-        global queue_display
-
-        # Iterate over the queue_display list and remove the item with the matching ID
-        queue_display = [item for item in queue_display if item != id_to_remove]
-        self.total_queue_items -= 1
-        self.update_overall_progress()
-
-        # Optionally, update the list widget after removal
-        self.populate_queue_list()
+        for observee in self.observees:
+            try:
+                observee.get_files()  # Notify the observer by calling its update method
+                ic("Observee notified:", observee)
+            except AttributeError as ae:
+                ic("Observee", observee, "does not implement 'get_files' method.", ae)
+            except Exception as e:
+                ic("An error occurred while notifying observee", observee, e)
 
     def update_overall_progress(self):
         if self.total_queue_items > 0:
@@ -103,49 +106,21 @@ class BackgroundThreadWindow(QMainWindow):
             progress = 0
         self.overall_progress_bar.setValue(progress)
 
-    def populate_queue_list(self):
-        ic()
-        global queue_display
-
-        # Clear the list widget first
-        try:
-            self.list_widget.clear()
-        except:
-            pass
-
-        # Iterate over the queue_display and add each filename to the list widget
-        for item in queue_display:
-            try:
-                self.list_widget.addItem(item)
-            except:
-                pass
-
-    def queue_display_append(self, item):
-        ic()
-        global queue_display
-
-        queue_display.append(item)
-        self.total_queue_items += 1
-        self.update_overall_progress()
-
     def scroll_to_bottom(self):
-        ic()
         # Scroll to the bottom of the QTextEdit
         vertical_scroll_bar = self.text_console.verticalScrollBar()
         vertical_scroll_bar.setValue(vertical_scroll_bar.maximum())
 
     def check_and_start_transfers(self):
-        ic()
         # Check if more transfers can be started
         if sftp_queue_isempty() or self.active_transfers == MAX_TRANSFERS:
             return
         else:
-            job = sftp_queue_get()  # Wait for 5 seconds for a job
-
-        self.populate_queue_list()
+            job = sftp_queue_get()
+            if job is None:
+                return
 
         if job.command == "end":
-            # self._stop_flag = 1
             ic("end command given")
         else:
             hostname = job.hostname
@@ -154,10 +129,9 @@ class BackgroundThreadWindow(QMainWindow):
             username = job.username
             command = job.command
 
-            self.start_transfer(job.id, job.source_path, job.destination_path, job.is_source_remote, job.is_destination_remote, hostname, port, username, password, command )
+            self.start_transfer(job.id, job.source_path, job.destination_path, job.is_source_remote, job.is_destination_remote, hostname, port, username, password, command)
 
     def start_transfer(self, transfer_id, job_source, job_destination, is_source_remote, is_destination_remote, hostname, port, username, password, command):
-        ic()
         # Create a vertical layout for the text and progress bar/cancel button
         vbox = QVBoxLayout()
 
@@ -197,6 +171,7 @@ class BackgroundThreadWindow(QMainWindow):
 
         # Store references to the widgets for later use
         new_transfer = Transfer(transfer_id=transfer_id, download_worker=DownloadWorker(transfer_id, job_source, job_destination, is_source_remote, is_destination_remote, hostname, port, username, password, command), active=True, hbox=hbox, progress_bar=progress_bar, cancel_button=cancel_button, tbox=textbox)
+        new_transfer.layout = vbox
 
         # Create and configure the download worker
         new_transfer.download_worker.signals.progress.connect(lambda tid, val: self.update_progress(tid, val))
@@ -206,14 +181,12 @@ class BackgroundThreadWindow(QMainWindow):
 
         # Start the download worker in the thread pool
         self.thread_pool.start(new_transfer.download_worker)
-        self.queue_display_append(new_transfer.download_worker.job_source)
-        self.populate_queue_list()
+        self.add_queue_item(job_source)
         self.active_transfers += 1
         self.update_overall_progress()
 
     def transfer_finished(self, transfer_id):
         # Find the transfer
-        ic()
         transfer = next((t for t in self.transfers if t.transfer_id == transfer_id), None)
 
         if transfer is None:
@@ -223,41 +196,41 @@ class BackgroundThreadWindow(QMainWindow):
         # Deactivate the transfer
         transfer.active = False
 
-        # Stop the download worker if it's active
-        # if transfer.download_worker and not transfer.download_worker.isFinished():
+        # Stop the download worker
         transfer.download_worker.stop_transfer()
 
         if transfer.tbox:
             transfer.tbox.deleteLater()
             transfer.tbox = None
 
-        # Remove and delete the progress bar
         if transfer.progress_bar:
             transfer.progress_bar.deleteLater()
             transfer.progress_bar = None
 
-        # Remove and delete the cancel button
         if transfer.cancel_button:
             transfer.cancel_button.deleteLater()
             transfer.cancel_button = None
 
-        if transfer.hbox:  # Assuming each transfer has a reference to its QHBoxLayout
-            # Find the index of the layout in the main layout and remove it
-            index = self.layout.indexOf(transfer.hbox)
-            if index != -1:
-                layout_item = self.layout.takeAt(index)
-                if layout_item:
-                    widget = layout_item.widget()
-                    if widget:
-                        widget.deleteLater()
+        if transfer.layout:
+            # Remove the layout from the main layout
+            self.layout.removeItem(transfer.layout)
+            # Delete all widgets in the layout
+            while transfer.layout.count():
+                item = transfer.layout.takeAt(0)
+                widget = item.widget()
+                if widget:
+                    widget.deleteLater()
+            # Delete the layout itself
+            transfer.layout.deleteLater()
 
         # Remove the transfer from the list
         self.transfers = [t for t in self.transfers if t.transfer_id != transfer_id]
         self.text_console.append("Transfer removed from the transfers list.")
-        self.remove_queue_item_by_id(transfer.download_worker.job_source)
-        self.populate_queue_list()
+        
+        self.remove_queue_item(transfer.download_worker.job_source)
         self.active_transfers -= 1
         self.update_overall_progress()
+        
         if transfer.download_worker.command == "upload" or transfer.download_worker.command == "download":
             self.notify_observees()
 
